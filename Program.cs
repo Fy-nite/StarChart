@@ -7,7 +7,7 @@ namespace StarChart
         static void Main(string[] args)
         {
             
-            using var game = new AsmoV2.AsmoGameEngine("StarChart", 1920, 1080);
+            using var game = new AsmoV2.AsmoGameEngine("StarChart", 640, 480);
             
             // Configure window policy so the engine will scale the canvas based on window size
             game.Policy = new AsmoV2.AsmoGameEngine.WindowPolicy

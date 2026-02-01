@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using StarChart.stdlib.W11;
 
-namespace VBlank.GPU
+namespace Adamantite.GPU
 {
     // Simple compositor that converts W11 Window canvases into Surfaces and
     // draws them into a target Surface in server window order (already sorted by layer).

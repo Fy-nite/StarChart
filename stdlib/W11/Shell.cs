@@ -1,5 +1,6 @@
 using System;
 using Adamantite.VFS;
+using Adamantite.GPU;
 using StarChart.Plugins;
 
 namespace StarChart.stdlib.W11
@@ -8,6 +9,7 @@ namespace StarChart.stdlib.W11
     public class Shell
     {
         readonly XTerm _term;
+        readonly VirtualTerminal? _vterm;
         TwmManager? _twm;
         readonly PluginLoader _pluginLoader;
         IStarChartPlugin? _currentPlugin;
@@ -15,7 +17,17 @@ namespace StarChart.stdlib.W11
         public Shell(XTerm term)
         {
             _term = term ?? throw new ArgumentNullException(nameof(term));
+            _vterm = null;
             _term.OnEnter += OnEnter;
+            _pluginLoader = new PluginLoader(VFSGlobal.Manager);
+        }
+
+        // New ctor to support VirtualTerminal-based sessions (fullscreen TTY)
+        public Shell(VirtualTerminal vterm)
+        {
+            _vterm = vterm ?? throw new ArgumentNullException(nameof(vterm));
+            _term = null!; // unused in VT mode
+            _vterm.OnEnter += OnEnter;
             _pluginLoader = new PluginLoader(VFSGlobal.Manager);
         }
 
@@ -97,19 +109,19 @@ namespace StarChart.stdlib.W11
                 var path = parts.Length > 1 ? parts[1] : "/";
                 if (VFSGlobal.Manager == null)
                 {
-                    _term.WriteLine("VFS not initialized");
+                    WriteLine("VFS not initialized");
                     return;
                 }
                 try
                 {
                     foreach (var fi in VFSGlobal.Manager.Enumerate(path))
                     {
-                        _term.WriteLine((fi.IsDirectory ? "d" : "-") + " " + fi.Path + " " + fi.Length);
+                        WriteLine((fi.IsDirectory ? "d" : "-") + " " + fi.Path + " " + fi.Length);
                     }
                 }
                 catch (Exception ex)
                 {
-                    _term.WriteLine("ls: " + ex.Message);
+                    WriteLine("ls: " + ex.Message);
                 }
                 return;
             }
@@ -161,10 +173,10 @@ namespace StarChart.stdlib.W11
                     return;
                 }
 
-                _term.WriteLine($"Discovered: {discovery.Name} ({discovery.Kind}) v{discovery.Version}");
+                WriteLine($"Discovered: {discovery.Name} ({discovery.Kind}) v{discovery.Version}");
                 if (!string.IsNullOrEmpty(discovery.Description))
                 {
-                    _term.WriteLine($"  {discovery.Description}");
+                    WriteLine($"  {discovery.Description}");
                 }
 
                 var server = _term?.Window?.Owner;
@@ -174,7 +186,7 @@ namespace StarChart.stdlib.W11
                 {
                     if (server == null)
                     {
-                        _term.WriteLine("Error: No display server available");
+                        WriteLine("Error: No display server available");
                         return;
                     }
 
@@ -199,7 +211,7 @@ namespace StarChart.stdlib.W11
                 var plugin = _pluginLoader.LoadPlugin(path, context);
                 if (plugin == null)
                 {
-                    _term.WriteLine("Error: Failed to load plugin");
+                    WriteLine("Error: Failed to load plugin");
                     return;
                 }
 
@@ -207,13 +219,23 @@ namespace StarChart.stdlib.W11
                 plugin.Start();
                 _currentPlugin = plugin;
 
-                _term.WriteLine($"Started: {discovery.Name}");
-                _term.WriteLine("Press Ctrl+C or type 'stop' to stop the plugin");
+                WriteLine($"Started: {discovery.Name}");
+                WriteLine("Press Ctrl+C or type 'stop' to stop the plugin");
             }
             catch (Exception ex)
             {
-                _term.WriteLine($"Error loading plugin: {ex.Message}");
+                WriteLine($"Error loading plugin: {ex.Message}");
             }
+        }
+
+        void WriteLine(string s)
+        {
+            try
+            {
+                if (_vterm != null) _vterm.WriteLine(s);
+                else _term.WriteLine(s);
+            }
+            catch { }
         }
     }
 }

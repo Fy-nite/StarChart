@@ -10,6 +10,7 @@ using StarChart.stdlib.W11;
 using Canvas = Adamantite.GFX.Canvas;
 using AsmoV2;
 using Microsoft.Xna.Framework.Input;
+using Adamantite.GPU;
 
 namespace StarChart
 {
@@ -24,6 +25,9 @@ namespace StarChart
         bool _prevLeftDown;
         List<XTerm> _xterms = new();
         KeyboardState _prevKeyboard;
+
+        // New: single virtual terminal for fullscreen TTY mode
+        VirtualTerminal? _vt;
 
         // Expose the running TWM instance so callers can wrap/unwrap client windows.
         public TwmManager? Twm => _twm;
@@ -104,21 +108,28 @@ namespace StarChart
                 }
             }
 
-            // Default: do not start twm by default. If nothing configured, create a login VT
-            // which requires the user to type `startw` to start W11.
-            var login = new XTerm(_server, "tty1", "login", 80, 6, 5, 5, 1, fontKind: XTerm.FontKind.Clean8x8);
-            login.Render();
-            _xterms.Add(login);
+            // Create a full-screen VirtualTerminal (TTY) sized to 80x80 characters and attach login shell
             try
             {
-                var lsh = new StarChart.stdlib.W11.LoginShell(login, this);
-                Console.Error.WriteLine("StarChart: LoginShell attached to tty1");
+                _vt = new VirtualTerminal(80, 80); // something about the math smells off...
+                _vt.RenderOptions = new VirtualTerminal.TextRenderOptions
+                {
+                    CharSpacing = 1,
+                    LineSpacing = 9,
+                    PaddingX = 1,
+                    PaddingY = 1
+                };
+                _vt.DefaultForeground = 0xFFFFFFFFu;
+                _vt.DefaultBackground = 0xFF000000u;
+                _vt.WriteLine("Welcome. Type 'startw' to start the W11 session.");
+                var lsh = new StarChart.stdlib.W11.LoginShell(_vt, this);
+                Console.Error.WriteLine("StarChart: LoginShell attached to virtual tty");
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine("StarChart: failed to attach LoginShell to tty1: " + ex.Message);
+                Console.Error.WriteLine("StarChart: failed to create/attach virtual terminal: " + ex.Message);
             }
-            
+
 
             // If an /etc/passwd exists in the VFS, spawn an XTerm and Shell per user entry
             if (vfs != null && vfs.Exists("/etc/passwd"))
@@ -214,8 +225,8 @@ namespace StarChart
                 catch { }
             }
         }
-        
 
+        
         // IEngineHost implementation - engine will call this when the runtime is hosted.
         public void SetEngine(AsmoGameEngine engine)
         {
@@ -286,6 +297,18 @@ namespace StarChart
                 }
             }
 
+            // If we have a fullscreen virtual terminal, route global keyboard to it when no TWM/window-manager.
+            if (_vt != null && activeTwm == null)
+            {
+                foreach (var key in keyboard.GetPressedKeys())
+                {
+                    if (!_prevKeyboard.IsKeyDown(key))
+                    {
+                        _vt.HandleKey(key, shift);
+                    }
+                }
+            }
+
             // If there's no TWM, emulate X11 behaviour: find the top-most mapped window under
             // the pointer, focus/raise it on click, and forward mouse events to it if we have
             // a handler (e.g. XTerm). This lets multiple terminals/windows be interacted with.
@@ -296,7 +319,7 @@ namespace StarChart
                 {
                     var w = _server.Windows[i];
                     if (!w.IsMapped || w.IsDestroyed) continue;
-
+                    
                     int wScale = Math.Max(1, w.Scale);
                     int onscreenW = w.Canvas.Width * wScale;
                     int onscreenH = w.Canvas.Height * wScale;
@@ -382,6 +405,15 @@ namespace StarChart
         public void Draw(Canvas surface)
         {
             if (_server == null || _surface == null) return;
+
+            // If we have a fullscreen VT and no windows/twm, render VT directly to surface
+            var activeTwm = _twm ?? _server?.WindowManager;
+            if (_vt != null && (activeTwm == null && (_server.Windows == null || _server.Windows.Count == 0)))
+            {
+                surface.Clear(Microsoft.Xna.Framework.Color.Black);
+                _vt.RenderToCanvas(surface);
+                return;
+            }
 
             bool fullRedraw = _server.ConsumeFullRedraw();
             if (fullRedraw)
@@ -579,6 +611,14 @@ namespace StarChart
             return _server.SetWindowContentSize(xid, width, height);
         }
 
+        // Attach a fullscreen VirtualTerminal (TTY) to the runtime. When set,
+        // the runtime will route keyboard input to the VT when no window manager
+        // is active and will render it directly to the canvas when appropriate.
+        public void AttachVirtualTerminal(VirtualTerminal vt)
+        {
+            _vt = vt;
+        }
+
         bool TryMapMouseToXTerm(XTerm xt, int mx, int my, out int localX, out int localY)
         {
             localX = 0;
@@ -603,5 +643,7 @@ namespace StarChart
             localY = ly / Math.Max(1, win.Scale);
             return true;
         }
+
+       
     }
 }

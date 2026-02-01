@@ -8,7 +8,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ObjectIR.MonoGame\Adamantite.csproj" />
     <ProjectReference Include="..\VBlank.csproj" />
   </ItemGroup>
 
