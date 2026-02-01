@@ -11,12 +11,14 @@ using Canvas = Adamantite.GFX.Canvas;
 using AsmoV2;
 using Microsoft.Xna.Framework.Input;
 using Adamantite.GPU;
+using Microsoft.Xna.Framework.Graphics;
+using StarChart.PTY;
 
 namespace StarChart
 {
     // A simple runtime that hosts a W11 DisplayServer and composites
     // its windows onto the provided Adamantite.GFX.Canvas.
-    public class Runtime : IConsoleGame, IEngineHost
+    public class Runtime : IConsoleGameWithSpriteBatch, IEngineHost
     {
         DisplayServer? _server;
         Canvas? _surface;
@@ -28,6 +30,7 @@ namespace StarChart
 
         // New: single virtual terminal for fullscreen TTY mode
         VirtualTerminal? _vt;
+        IPty? _pty;
 
         // Expose the running TWM instance so callers can wrap/unwrap client windows.
         public TwmManager? Twm => _twm;
@@ -108,26 +111,23 @@ namespace StarChart
                 }
             }
 
-            // Create a full-screen VirtualTerminal (TTY) sized to 80x80 characters and attach login shell
+            // Create a session manager and start a default session that will run /bin/sh (if present)
             try
             {
-                _vt = new VirtualTerminal(80, 80); // something about the math smells off...
-                _vt.RenderOptions = new VirtualTerminal.TextRenderOptions
+                var sessionManager = new StarChart.PTY.SessionManager(_server, vfs ?? new Adamantite.VFS.VfsManager());
+                var res = sessionManager.CreateSession("root");
+                if (res != null)
                 {
-                    CharSpacing = 1,
-                    LineSpacing = 9,
-                    PaddingX = 1,
-                    PaddingY = 1
-                };
-                _vt.DefaultForeground = 0xFFFFFFFFu;
-                _vt.DefaultBackground = 0xFF000000u;
-                _vt.WriteLine("Welcome. Type 'startw' to start the W11 session.");
-                var lsh = new StarChart.stdlib.W11.LoginShell(_vt, this);
-                Console.Error.WriteLine("StarChart: LoginShell attached to virtual tty");
+                    _vt = res.Value.vt;
+                    _pty = res.Value.pty;
+                    // Attach VT to runtime for rendering/input routing
+                    AttachVirtualTerminal(_vt);
+                    Console.Error.WriteLine("StarChart: PTY session started and attached as virtual tty");
+                }
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine("StarChart: failed to create/attach virtual terminal: " + ex.Message);
+                Console.Error.WriteLine("StarChart: failed to create PTY session: " + ex.Message);
             }
 
 
@@ -298,13 +298,13 @@ namespace StarChart
             }
 
             // If we have a fullscreen virtual terminal, route global keyboard to it when no TWM/window-manager.
-            if (_vt != null && activeTwm == null)
+            if (_pty != null && activeTwm == null)
             {
                 foreach (var key in keyboard.GetPressedKeys())
                 {
                     if (!_prevKeyboard.IsKeyDown(key))
                     {
-                        _vt.HandleKey(key, shift);
+                        _pty.HandleKey(key, shift);
                     }
                 }
             }
@@ -404,184 +404,40 @@ namespace StarChart
 
         public void Draw(Canvas surface)
         {
-            if (_server == null || _surface == null) return;
-
-            // If we have a fullscreen VT and no windows/twm, render VT directly to surface
-            var activeTwm = _twm ?? _server?.WindowManager;
-            if (_vt != null && (activeTwm == null && (_server.Windows == null || _server.Windows.Count == 0)))
+            // Minimal draw path: clear the provided surface and render only the
+            // attached fullscreen virtual terminal if present. This removes the
+            // previous window/compositor complexity so we can focus on PTY/session
+            // basics.
+            if (surface == null) return;
+            surface.Clear(Microsoft.Xna.Framework.Color.Black);
+            if (_vt != null)
             {
-                surface.Clear(Microsoft.Xna.Framework.Color.Black);
                 _vt.RenderToCanvas(surface);
-                return;
             }
+        }
 
-            bool fullRedraw = _server.ConsumeFullRedraw();
-            if (fullRedraw)
+        public void Draw(SpriteBatch sb, SpriteFont font, float presentationScale)
+        {
+            if (_vt != null)
             {
-                _surface.Clear(Microsoft.Xna.Framework.Color.Black);
-                foreach (var w in _server.Windows)
-                {
-                    if (!w.IsMapped || w.IsDestroyed) continue;
-                    DrawWindowRegion(w, w.Geometry.X, w.Geometry.Y, w.Canvas.Width * Math.Max(1, w.Scale), w.Canvas.Height * Math.Max(1, w.Scale));
-                    w.Canvas.ClearDirty();
-                }
-                return;
-            }
-
-            var dirtyRects = new List<(int x, int y, int w, int h)>();
-            foreach (var w in _server.Windows)
-            {
-                if (!w.IsMapped || w.IsDestroyed) continue;
-                if (!w.Canvas.IsDirty) continue;
-
-                int scale = Math.Max(1, w.Scale);
-                int x = w.Geometry.X + w.Canvas.DirtyX * scale;
-                int y = w.Geometry.Y + w.Canvas.DirtyY * scale;
-                int wpx = w.Canvas.DirtyWidth * scale;
-                int hpx = w.Canvas.DirtyHeight * scale;
-                if (wpx > 0 && hpx > 0)
-                {
-                    dirtyRects.Add((x, y, wpx, hpx));
-                }
-                w.Canvas.ClearDirty();
-            }
-
-            foreach (var rect in dirtyRects)
-            {
-                ClearRect(rect.x, rect.y, rect.w, rect.h);
-                foreach (var w in _server.Windows)
-                {
-                    if (!w.IsMapped || w.IsDestroyed) continue;
-                    DrawWindowRegion(w, rect.x, rect.y, rect.w, rect.h);
-                }
+                float scaleX = (_surface.width * presentationScale) / (float)(_vt.Columns * font.MeasureString(" ").X);
+                float scaleY = (_surface.height * presentationScale) / (float)(_vt.Rows * font.LineSpacing);
+                float scale = Math.Min(scaleX, scaleY);
+                int x = (int)((_surface.width * presentationScale - _vt.Columns * font.MeasureString(" ").X * scale) / 2);
+                int y = (int)((_surface.height * presentationScale - _vt.Rows * font.LineSpacing * scale) / 2);
+                _vt.Draw(sb, font, x, y, scale);
             }
         }
 
         void DrawWindowRegion(Window w, int rectX, int rectY, int rectW, int rectH)
         {
-            int scale = Math.Max(1, w.Scale);
-            int winX = w.Geometry.X;
-            int winY = w.Geometry.Y;
-            int winW = w.Canvas.Width * scale;
-            int winH = w.Canvas.Height * scale;
-
-            int ix0 = Math.Max(rectX, winX);
-            int iy0 = Math.Max(rectY, winY);
-            int ix1 = Math.Min(rectX + rectW, winX + winW);
-            int iy1 = Math.Min(rectY + rectH, winY + winH);
-            if (ix1 <= ix0 || iy1 <= iy0) return;
-
-            int canvasXStart = Math.Max(0, (ix0 - winX) / scale);
-            int canvasYStart = Math.Max(0, (iy0 - winY) / scale);
-            int canvasXEnd = Math.Min(w.Canvas.Width, (ix1 - winX + scale - 1) / scale);
-            int canvasYEnd = Math.Min(w.Canvas.Height, (iy1 - winY + scale - 1) / scale);
-
-            // Fast path when no scaling is applied (scale == 1): operate directly on arrays
-            var srcBuf = w.Canvas.PixelBuffer;
-            var dstBuf = _surface.PixelData;
-            int dstWidth = _surface.width;
-            int srcWidth = w.Canvas.Width;
-
-            if (scale == 1)
-            {
-                for (int cy = canvasYStart; cy < canvasYEnd; cy++)
-                {
-                    int sy = winY + cy;
-                    if (sy < iy0 || sy >= iy1 || sy < 0 || sy >= _surface.height) continue;
-
-                    int srcRow = cy * srcWidth * 4;
-                    int dstRowBase = sy * dstWidth;
-
-                    for (int cx = canvasXStart; cx < canvasXEnd; cx++)
-                    {
-                        int dstX = winX + cx;
-                        if (dstX < ix0 || dstX >= ix1 || dstX < 0 || dstX >= _surface.width) continue;
-                        int dstIdx = dstRowBase + dstX;
-
-                        int sidx = srcRow + cx * 4;
-                        byte a = srcBuf[sidx + 0];
-                        byte r = srcBuf[sidx + 1];
-                        byte g = srcBuf[sidx + 2];
-                        byte b = srcBuf[sidx + 3];
-                        if (a == 255)
-                        {
-                            dstBuf[dstIdx] = new Microsoft.Xna.Framework.Color(r, g, b, a);
-                        }
-                        else if (a == 0)
-                        {
-                            // transparent, do nothing
-                        }
-                        else
-                        {
-                            var dst = dstBuf[dstIdx];
-                            byte outR = (byte)((r * a + dst.R * (255 - a)) / 255);
-                            byte outG = (byte)((g * a + dst.G * (255 - a)) / 255);
-                            byte outB = (byte)((b * a + dst.B * (255 - a)) / 255);
-                            dstBuf[dstIdx] = new Microsoft.Xna.Framework.Color(outR, outG, outB, (byte)255);
-                        }
-                    }
-                }
-                return;
-            }
-
-            // General path for scaled blits
-            for (int cy = canvasYStart; cy < canvasYEnd; cy++)
-            {
-                int syBase = winY + cy * scale;
-                int srcRow = cy * srcWidth * 4;
-                for (int cx = canvasXStart; cx < canvasXEnd; cx++)
-                {
-                    int sxBase = winX + cx * scale;
-                    int sidx = srcRow + cx * 4;
-                    byte a = srcBuf[sidx + 0];
-                    byte r = srcBuf[sidx + 1];
-                    byte g = srcBuf[sidx + 2];
-                    byte b = srcBuf[sidx + 3];
-                    var col = new Microsoft.Xna.Framework.Color(r, g, b, a);
-
-                    for (int syOff = 0; syOff < scale; syOff++)
-                    {
-                        int sy = syBase + syOff;
-                        if (sy < iy0 || sy >= iy1 || sy < 0 || sy >= _surface.height) continue;
-                        int dstRow = sy * dstWidth;
-                        for (int sxOff = 0; sxOff < scale; sxOff++)
-                        {
-                            int sx = sxBase + sxOff;
-                            if (sx < ix0 || sx >= ix1 || sx < 0 || sx >= _surface.width) continue;
-                            int idx = dstRow + sx;
-                            if (a == 255)
-                            {
-                                dstBuf[idx] = col;
-                            }
-                            else if (a != 0)
-                            {
-                                var dst = dstBuf[idx];
-                                byte outR = (byte)((r * a + dst.R * (255 - a)) / 255);
-                                byte outG = (byte)((g * a + dst.G * (255 - a)) / 255);
-                                byte outB = (byte)((b * a + dst.B * (255 - a)) / 255);
-                                dstBuf[idx] = new Microsoft.Xna.Framework.Color(outR, outG, outB, (byte)255);
-                            }
-                        }
-                    }
-                }
-            }
+            // No-op minimal implementation kept for compatibility during refactor.
+            return;
         }
-
         void ClearRect(int x, int y, int w, int h)
         {
-            int x0 = Math.Max(0, x);
-            int y0 = Math.Max(0, y);
-            int x1 = Math.Min(_surface.width, x + w);
-            int y1 = Math.Min(_surface.height, y + h);
-            if (x1 <= x0 || y1 <= y0) return;
-            for (int yy = y0; yy < y1; yy++)
-            {
-                int row = yy * _surface.width;
-                for (int xx = x0; xx < x1; xx++)
-                {
-                    _surface.PixelData[row + xx] = Microsoft.Xna.Framework.Color.Black;
-                }
-            }
+            // No-op minimal implementation kept for compatibility during refactor.
+            return;
         }
 
         // Convenience wrapper so callers can create windows without accessing Server directly.

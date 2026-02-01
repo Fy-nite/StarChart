@@ -7,6 +7,12 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+
+  <!-- Exclude helper/testing projects/folders to avoid duplicate entry points -->
+  <ItemGroup>
+    <Compile Remove="CraSH\**\*.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\VBlank.csproj" />
   </ItemGroup>

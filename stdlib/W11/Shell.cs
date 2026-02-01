@@ -63,24 +63,24 @@ namespace StarChart.stdlib.W11
                 var server = _term?.Window?.Owner;
                 if (server == null)
                 {
-                    _term.WriteLine("startwm: no display server available");
+                    WriteLine("startwm: no display server available");
                     return;
                 }
                 // If the server already has a registered WM, report an error to the user.
                 if (server.WindowManager != null)
                 {
-                    _term.WriteLine("startwm: a window manager is already running");
+                    WriteLine("startwm: a window manager is already running");
                     return;
                 }
 
                 try
                 {
                     _twm = new TwmManager(server);
-                    _term.WriteLine("startwm: twm started");
+                    WriteLine("startwm: twm started");
                 }
                 catch (Exception ex)
                 {
-                    _term.WriteLine("startwm: failed to start twm: " + ex.Message);
+                    WriteLine("startwm: failed to start twm: " + ex.Message);
                 }
                 return;
             }
@@ -90,7 +90,7 @@ namespace StarChart.stdlib.W11
             {
                 if (_twm == null)
                 {
-                    _term.WriteLine("stopwm: twm not running");
+                    WriteLine("stopwm: twm not running");
                     return;
                 }
                 try
@@ -99,7 +99,7 @@ namespace StarChart.stdlib.W11
                 }
                 catch { }
                 _twm = null;
-                _term.WriteLine("stopwm: twm stopped");
+                WriteLine("stopwm: twm stopped");
                 return;
             }
             // basic builtins: ls, cat, run, exec
@@ -131,18 +131,18 @@ namespace StarChart.stdlib.W11
                 var path = cmd.Substring(4).Trim();
                 if (VFSGlobal.Manager == null)
                 {
-                    _term.WriteLine("VFS not initialized");
+                    WriteLine("VFS not initialized");
                     return;
                 }
                 try
                 {
                     var bytes = VFSGlobal.Manager.ReadAllBytes(path);
                     var s = System.Text.Encoding.UTF8.GetString(bytes);
-                    _term.WriteLine(s);
+                    WriteLine(s);
                 }
                 catch (Exception ex)
                 {
-                    _term.WriteLine("cat: " + ex.Message);
+                    WriteLine("cat: " + ex.Message);
                 }
                 return;
             }
@@ -156,7 +156,7 @@ namespace StarChart.stdlib.W11
                 return;
             }
 
-            _term.WriteLine($"Unknown command: {cmd}");
+            WriteLine($"Unknown command: {cmd}");
         }
 
         void LoadPluginFromPath(string path)
@@ -167,9 +167,9 @@ namespace StarChart.stdlib.W11
                 var discovery = _pluginLoader.DiscoverPlugin(path);
                 if (discovery == null)
                 {
-                    _term.WriteLine($"Error: {path} is not a valid StarChart plugin");
-                    _term.WriteLine("Plugins must have one of: [StarChartApp], [StarChartWindowManager],");
-                    _term.WriteLine("  [StarChartDesktopEnvironment], [StarChartGame], [StarChartService]");
+                    WriteLine($"Error: {path} is not a valid StarChart plugin");
+                    WriteLine("Plugins must have one of: [StarChartApp], [StarChartWindowManager],");
+                    WriteLine("  [StarChartDesktopEnvironment], [StarChartGame], [StarChartService]");
                     return;
                 }
 
@@ -180,7 +180,7 @@ namespace StarChart.stdlib.W11
                 }
 
                 var server = _term?.Window?.Owner;
-
+                
                 // Special handling for window managers
                 if (discovery.Kind == PluginKind.WindowManager)
                 {
@@ -192,8 +192,8 @@ namespace StarChart.stdlib.W11
 
                     if (server.WindowManager != null)
                     {
-                        _term.WriteLine("Error: A window manager is already running");
-                        _term.WriteLine("Stop it first with 'stopwm'");
+                        WriteLine("Error: A window manager is already running");
+                        WriteLine("Stop it first with 'stopwm'");
                         return;
                     }
                 }

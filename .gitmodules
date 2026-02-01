@@ -1,0 +1,3 @@
+[submodule "CraSH"]
+	path = CraSH
+	url = https://git.finite.ovh/CraSH
