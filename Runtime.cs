@@ -37,7 +37,16 @@ namespace StarChart
 
 
             // create the display server
-            _server = new DisplayServer();
+            try
+            {
+                _server = new DisplayServer();
+                Console.Error.WriteLine("StarChart: DisplayServer created");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("StarChart: Failed to create DisplayServer: " + ex.Message);
+                throw;
+            }
 
             // Read startup configuration from VFS /etc/W11/Winit if available.
             // Supported lines:
@@ -56,12 +65,21 @@ namespace StarChart
                     {
                         line = line.Trim();
                         if (string.IsNullOrEmpty(line) || line.StartsWith("#")) continue;
+                        Console.Error.WriteLine($"StarChart: Winit line: '{line}'");
                         var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                         if (parts.Length == 0) continue;
                         if (parts[0].Equals("twm", StringComparison.OrdinalIgnoreCase))
                         {
-                            _twm = new TwmManager(_server);
-                            startedAny = true;
+                            try
+                            {
+                                _twm = new TwmManager(_server);
+                                Console.Error.WriteLine("StarChart: twm started from Winit");
+                                startedAny = true;
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.Error.WriteLine("StarChart: failed to start twm from Winit: " + ex.Message);
+                            }
                         }
                         else if (parts[0].Equals("xterm", StringComparison.OrdinalIgnoreCase))
                         {
@@ -75,28 +93,31 @@ namespace StarChart
                             var xt = new XTerm(_server, "xterm", "XTerm", cols, rows, x, y, scale, fk);
                             xt.Render();
                             _xterms.Add(xt);
+                            Console.Error.WriteLine($"StarChart: created xterm at {x},{y} size {cols}x{rows} scale {scale}");
                             startedAny = true;
                         }
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // ignore malformed winit
+                    Console.Error.WriteLine("StarChart: failed reading /etc/W11/Winit: " + ex.Message);
                 }
             }
 
-            // Default: do not start twm by default. If nothing configured, create a single xterm.
-           
-                var xt1 = new XTerm(_server, "xterm", "XTerm", 80, 20, 10, 10, 2, fontKind: XTerm.FontKind.Classic5x7);
-                xt1.Render();
-                _xterms.Add(xt1);
-
-                // Attach a shell to the default xterm so it's interactive
-                try
-                {
-                    var sh = new Shell(xt1);
-                }
-                catch { }
+            // Default: do not start twm by default. If nothing configured, create a login VT
+            // which requires the user to type `startw` to start W11.
+            var login = new XTerm(_server, "tty1", "login", 80, 6, 5, 5, 1, fontKind: XTerm.FontKind.Clean8x8);
+            login.Render();
+            _xterms.Add(login);
+            try
+            {
+                var lsh = new StarChart.stdlib.W11.LoginShell(login, this);
+                Console.Error.WriteLine("StarChart: LoginShell attached to tty1");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("StarChart: failed to attach LoginShell to tty1: " + ex.Message);
+            }
             
 
             // If an /etc/passwd exists in the VFS, spawn an XTerm and Shell per user entry
@@ -137,6 +158,63 @@ namespace StarChart
                 catch { }
             }
         }
+
+        // Start the default W11 environment: default xterm(s), optional twm, and per-user shells.
+        public void StartW11()
+        {
+            if (_server == null) throw new InvalidOperationException("Display server not initialized");
+
+            // Create a primary xterm and attach interactive shell
+            var xt1 = new XTerm(_server, "xterm", "XTerm", 80, 20, 10, 10, 2, fontKind: XTerm.FontKind.Classic5x7);
+            xt1.Render();
+            _xterms.Add(xt1);
+
+            try
+            {
+                var sh = new Shell(xt1);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("StarChart: failed to attach Shell to xterm: " + ex.Message);
+            }
+
+            // If /etc/passwd exists, spawn per-user xterms
+            var vfs = VFSGlobal.Manager;
+            if (vfs != null && vfs.Exists("/etc/passwd"))
+            {
+                try
+                {
+                    using var ps = vfs.OpenRead("/etc/passwd");
+                    using var prs = new StreamReader(ps);
+                    string? pline;
+                    int pidx = 0;
+                    while ((pline = prs.ReadLine()) != null)
+                    {
+                        pline = pline.Trim();
+                        if (string.IsNullOrEmpty(pline) || pline.StartsWith("#")) continue;
+                        var parts = pline.Split(':', 2, StringSplitOptions.RemoveEmptyEntries);
+                        var uname = parts.Length > 0 ? parts[0] : string.Empty;
+                        if (string.IsNullOrEmpty(uname)) continue;
+
+                        int x = 10 + (pidx % 3) * 260;
+                        int y = 10 + (pidx / 3) * 180;
+                        var xterm = new XTerm(_server, "xterm", uname, 80, 24, x, y, 1, fontKind: XTerm.FontKind.Clean8x8);
+                        xterm.Render();
+                        _xterms.Add(xterm);
+
+                        try
+                        {
+                            var sh = new Shell(xterm);
+                        }
+                        catch { }
+
+                        pidx++;
+                    }
+                }
+                catch { }
+            }
+        }
+        
 
         // IEngineHost implementation - engine will call this when the runtime is hosted.
         public void SetEngine(AsmoGameEngine engine)
