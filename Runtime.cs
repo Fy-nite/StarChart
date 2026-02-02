@@ -18,9 +18,43 @@ namespace StarChart
 {
     // A simple runtime that hosts a W11 DisplayServer and composites
     // its windows onto the provided Adamantite.GFX.Canvas.
+    // Simple IScheduledTask interface for scheduled jobs
+    public interface IScheduledTask
+    {
+        // Called by the scheduler when the task should run
+        void Execute(double deltaTime);
+        // Optionally, return true if the task should be removed after execution
+        bool IsComplete { get; }
+    }
+
+    // Basic round-robin scheduler
+    public class Scheduler
+    {
+        private readonly List<IScheduledTask> _tasks = new();
+
+        public void AddTask(IScheduledTask task)
+        {
+            if (task != null) _tasks.Add(task);
+        }
+
+        public void Update(double deltaTime)
+        {
+            for (int i = _tasks.Count - 1; i >= 0; i--)
+            {
+                var task = _tasks[i];
+                task.Execute(deltaTime);
+                if (task.IsComplete)
+                    _tasks.RemoveAt(i);
+            }
+        }
+    }
+
     public class Runtime : IConsoleGameWithSpriteBatch, IEngineHost
     {
         DisplayServer? _server;
+        private Scheduler _scheduler = new Scheduler();
+            // Expose the scheduler for external modules
+            public Scheduler Scheduler => _scheduler;
         Canvas? _surface;
         AsmoGameEngine? _engine;
         TwmManager? _twm;
@@ -169,6 +203,8 @@ namespace StarChart
                 catch { }
             }
         }
+        // Example: Register a demo scheduled task (remove or replace in production)
+        // _scheduler.AddTask(new DemoScheduledTask());
 
         // Start the default W11 environment: default xterm(s), optional twm, and per-user shells.
         public void StartW11()
@@ -243,6 +279,8 @@ namespace StarChart
 
         public void Update(double deltaTime)
         {
+            // Update scheduler before other kernel logic
+            _scheduler.Update(deltaTime);
             // Nothing special for now. Clients can manipulate windows via the DisplayServer API.
             // If a TWM was started from a shell it may have registered itself on the server;
             // prefer the explicit runtime _twm if set, otherwise use the server's WindowManager.

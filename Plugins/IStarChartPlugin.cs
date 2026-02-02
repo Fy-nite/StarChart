@@ -12,10 +12,14 @@ namespace StarChart.Plugins
         public Adamantite.VFS.VfsManager? VFS { get; set; }
         public string[] Arguments { get; set; } = Array.Empty<string>();
         public string WorkingDirectory { get; set; } = "/";
+        // PATH entries made available to plugins (VFS paths)
+        public string[] Path { get; set; } = Array.Empty<string>();
         // Primary PTY provided by the host (physical terminal)
         public StarChart.PTY.IPty? PrimaryPty { get; set; }
         // TerminalHost provided by the host to allow plugins to take control of IO
         public StarChart.AppFramework.TerminalHost? TerminalHost { get; set; }
+        // Scheduler provided by the host for apps/plugins to register tasks
+        public StarChart.Scheduler? Scheduler { get; set; }
     }
 
     /// <summary>

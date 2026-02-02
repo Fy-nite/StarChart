@@ -197,6 +197,24 @@ namespace StarChart.Plugins
                     return null;
                 }
 
+                // Populate PATH entries for the plugin context based on VFS
+                try
+                {
+                    var vfs = context.VFS;
+                    var paths = new List<string>();
+                    // root is always useful
+                    paths.Add("/");
+                    if (vfs != null)
+                    {
+                        foreach (var candidate in new[] { "/bin", "/apps", "/usr/bin", "/home/bin" })
+                        {
+                            try { if (vfs.Exists(candidate)) paths.Add(candidate); } catch { }
+                        }
+                    }
+                    context.Path = paths.ToArray();
+                }
+                catch { }
+
                 // Initialize
                 plugin.Initialize(context);
                 _loadedPlugins.Add(plugin);

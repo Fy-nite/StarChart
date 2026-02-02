@@ -20,6 +20,9 @@ namespace StarChart.stdlib.W11
             _vterm = null;
             _term.OnEnter += OnEnter;
             _pluginLoader = new PluginLoader(VFSGlobal.Manager);
+            
+            // Hook up Sys.Console
+            Sys.Console.Backend = new XTermConsoleBackend(_term);
         }
 
         // New ctor to support VirtualTerminal-based sessions (fullscreen TTY)
@@ -29,7 +32,11 @@ namespace StarChart.stdlib.W11
             _term = null!; // unused in VT mode
             _vterm.OnEnter += OnEnter;
             _pluginLoader = new PluginLoader(VFSGlobal.Manager);
+
+            // Hook up Sys.Console
+            Sys.Console.Backend = new VirtualTerminalConsoleBackend(_vterm);
         }
+
 
         void OnEnter(string line)
         {
