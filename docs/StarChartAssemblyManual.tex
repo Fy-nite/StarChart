@@ -1,0 +1,138 @@
+% StarChart Assembly Language Manual
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{longtable}
+\geometry{margin=1in}
+\title{StarChart Assembly Language Manual}
+\author{StarChart Project}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\section{Introduction}
+This manual describes the small assembly language and runtime conventions used by the StarChart project.
+The language is intentionally tiny and is interpreted by the StarChart \texttt{AssemblyRuntime}. Programs can invoke host functions via the \texttt{HOST} instruction and perform operating-system-like calls via the \texttt{SYSCALL} (or \texttt{SYS}) mechanism.
+
+\section{Execution Model}
+Programs are executed by the \texttt{AssemblyRuntime}, which provides:
+\begin{itemize}
+  \item A set of named 64-bit registers (addressed by name, stored as \texttt{long}).
+  \item A contiguous byte-addressable memory buffer (default 64 KiB).
+  \item A host interface (\texttt{IAssemblyHost}) that implements \texttt{Call}, \texttt{Exit}, \texttt{Write} and \texttt{WriteLine}.
+\end{itemize}
+
+The interpreter reads an AST produced by the Jakarada parser and executes instructions sequentially.
+
+\section{Registers and Memory}
+Common registers initialized by the runtime:
+\begin{verbatim}
+rax rbx rcx rdx rsi rdi rbp rsp rip
+\end{verbatim}
+The stack pointer \texttt{rsp} is initialized to the end of the memory region.
+
+Strings are stored as zero-terminated UTF-8 bytes in memory.
+
+\section{Basic Instructions}
+The instruction set includes the following core mnemonics:
+\begin{itemize}
+  \item \texttt{MOV dest, src} -- move an immediate or register value into a register.
+  \item \texttt{ADD dest, src} -- add an operand to a register.
+  \item \texttt{SUB dest, src} -- subtract an operand from a register.
+  \item \texttt{CMP a, b} -- compare two operands and set the ZF (zero) flag.
+  \item \texttt{JMP label} -- unconditional jump to a label.
+  \item \texttt{JE label} / \texttt{JNE label} -- conditional jumps based on ZF.
+  \item \texttt{CALL label} / \texttt{RET} -- call/return using an interpreter-managed call stack.
+  \item \texttt{HOST ident} -- invoke a host function by identifier. The host receives the runtime context.
+  \item \texttt{SYS [imm]} or \texttt{SYSCALL} -- perform a syscall via the host.
+\end{itemize}
+
+Operands supported:
+\begin{itemize}
+  \item Register operands: \texttt{rax}, \texttt{rbx}, etc.
+  \item Immediate operands: numeric literals (decimal) used directly.
+  \item Label references used where labels are expected.
+\end{itemize}
+
+\section{HOST and SYSCALL semantics}
+\subsection{HOST}
+The \texttt{HOST} instruction calls the host interface's \texttt{Call} method. The operand is an identifier which the host interprets. For example, \texttt{HOST print\_rax} invokes the host implementation of \texttt{print\_rax}.
+
+\subsection{SYSCALL / SYS}
+The interpreter forwards SYSCALL requests to the host as follows:
+\begin{itemize}
+  \item \texttt{SYSCALL} -- the host reads the syscall number from \texttt{rax} and uses the standard calling convention registers (e.g., \texttt{rdi}, \texttt{rsi}, \texttt{rdx}) for arguments.
+  \item \texttt{SYS N} -- shorthand for invoking syscall number \texttt{N} directly.
+  \item \texttt{SYS} with no operand behaves like \texttt{SYSCALL}.
+\end{itemize}
+
+The reference implementation in \texttt{StarChartAssemblyHost} provides a small subset of Linux-like syscalls (see the syscall reference below).
+
+\section{Syscall Reference (simple subset)}
+The reference host implements the following syscalls:
+\begin{longtable}{p{2cm} p{10cm}}
+\textbf{Number} & \textbf{Semantics} \\
+0 & \texttt{read(fd, buf, count)}: reads up to \texttt{count} bytes into memory at \texttt{buf}. Only \texttt{fd=0} (stdin) is supported in the reference; returns number of bytes read or -1 on error (value returned in \texttt{rax}). \\
+1 & \texttt{write(fd, buf, count)}: writes \texttt{count} bytes from memory at \texttt{buf} to file descriptor \texttt{fd}. In the reference, \texttt{fd=1} or \texttt{2} (stdout/stderr) prints to the host console. Returns bytes written in \texttt{rax}. \\
+59 & \texttt{execve(filename, argv, envp)}: executes a program. The reference implementation reads a zero-terminated filename string from memory (pointer in \texttt{rdi}) and attempts to execute it via the engine's exec path (managed assemblies, native exe fallback, or assembly source). Returns 0 on success (in \texttt{rax}) or -1 on failure. \\
+60 & \texttt{exit(status)}: terminates the current program by calling the host's \texttt{Exit} method with the status (argument in \texttt{rdi}). \\
+\end{longtable}
+
+\section{Examples}
+\subsection{Hello World via SYSCALL/write}
+\begin{verbatim}
+; put the message in memory first (demonstrative pseudo-assembly)
+MOV rax, 0        ; syscall number for read/write convention not used here
+; write(stdout, msg_ptr, len)
+MOV rdi, 1        ; fd = 1 (stdout)
+MOV rsi, 1024     ; assume message pointer stored at memory address 1024
+MOV rdx, 13       ; length
+SYSCALL           ; host will perform write(fd, buf, count)
+
+; memory at 1024 holds "Hello, World\n\0"
+
+\end{verbatim}
+
+\subsection{Using HOST for convenience}
+The built-in host in examples provides \texttt{HOST print\_rax} and \texttt{HOST print\_regs}. Example:
+\begin{verbatim}
+MOV rax, 123
+HOST print_rax
+\end{verbatim}
+
+\subsection{Execing another program}
+To execute another program from assembly, place the filename string in memory and call \texttt{execve} (syscall 59):
+\begin{verbatim}
+; put filename "/app.asm\0" at address 2000
+MOV rdi, 2000   ; filename pointer
+MOV rsi, 0      ; argv = NULL (not implemented in reference)
+MOV rdx, 0      ; envp = NULL
+MOV rax, 59     ; syscall execve
+SYSCALL
+\end{verbatim}
+
+On the reference host this will attempt to locate \texttt{/app.asm} in the VFS and run it (or load a managed \texttt{.dll}/\texttt{.exe} if present).
+
+\section{Running Assembly Programs}
+You can run assembly stored in the VFS using the host's exec mechanism. From the W11 shell run:
+\begin{verbatim}
+./program.asm
+\end{verbatim}
+or use the built-in host call from other contexts:
+\begin{verbatim}
+var host = new StarChart.Assembly.StarChartAssemblyHost();
+host.Call("exec:/path/to/program.asm", new StarChart.Assembly.AssemblyRuntimeContext());
+\end{verbatim}
+
+The project also exposes a stdlib helper `KernelExec.Exec(path, args)` which attempts to load managed assemblies, launch native executables, or run assembly source depending on the file type.
+
+\section{Appendix: Tips and Conventions}
+\begin{itemize}
+  \item Labels are case-insensitive and may be used with \texttt{JMP/CALL}. 
+  \item The runtime's host interface provides a flexible extension point for system functionality. To add syscalls, extend \texttt{StarChartAssemblyHost.HandleSyscall}.
+  \item For more advanced file/FD support, extend the VFS and host to map FDs to VFS streams.
+\end{itemize}
+
+\end{document}

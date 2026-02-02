@@ -206,11 +206,25 @@ namespace StarChart.Assembly
                             break;
                         case "SYS":
                             {
-                                // SYS <imm>
-                                if (ins.Operands.Count == 0 || ins.Operands[0] is not ImmediateOperand imm)
-                                    throw new InvalidOperationException("SYS requires an immediate operand");
-
-                                HandleSys((int)imm.Value);
+                                // SYS [imm] -> if immediate provided, call specific syscall number, otherwise use rax
+                                if (ins.Operands.Count == 0)
+                                {
+                                    _host.Call("syscall", _ctx);
+                                }
+                                else if (ins.Operands[0] is ImmediateOperand imm)
+                                {
+                                    _host.Call("syscall:" + ((int)imm.Value), _ctx);
+                                }
+                                else
+                                {
+                                    throw new InvalidOperationException("SYS requires an immediate operand or no operands");
+                                }
+                            }
+                            break;
+                        case "SYSCALL":
+                            {
+                                // SYSCALL -> use registers (rax etc.) to determine syscall
+                                _host.Call("syscall", _ctx);
                             }
                             break;
                         default:
@@ -223,31 +237,6 @@ namespace StarChart.Assembly
                 {
                     throw new Exception($"Error executing instruction {ins.Mnemonic} at line {ins.LineNumber}: {ex.Message}", ex);
                 }
-            }
-        }
-
-        private void HandleSys(int code)
-        {
-            // Very small syscall set used for demos:
-            // 1 => print numeric rax
-            // 2 => print zero-terminated string at address in rax
-            // 3 => exit with code in rax
-            switch (code)
-            {
-                case 1:
-                    Console.WriteLine(_ctx.Registers.GetValueOrDefault("rax"));
-                    break;
-                case 2:
-                    var addr = (int)_ctx.Registers.GetValueOrDefault("rax");
-                    Console.WriteLine(ReadString(addr));
-                    break;
-                case 3:
-                    var c = (int)_ctx.Registers.GetValueOrDefault("rax");
-                    _host.Exit(c);
-                    break;
-                default:
-                    Console.WriteLine($"[sys] unknown syscall {code}");
-                    break;
             }
         }
 
