@@ -11,6 +11,7 @@
   <!-- Exclude helper/testing projects/folders to avoid duplicate entry points -->
   <ItemGroup>
     <Compile Remove="CraSH\**\*.cs" />
+    <Compile Remove="TestHarness\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>

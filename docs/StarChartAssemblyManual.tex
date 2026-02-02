@@ -35,7 +35,7 @@ The stack pointer \texttt{rsp} is initialized to the end of the memory region.
 
 Strings are stored as zero-terminated UTF-8 bytes in memory.
 
-\section{Basic Instructions}
+\section{Instruction Set}
 The instruction set includes the following core mnemonics:
 \begin{itemize}
   \item \texttt{MOV dest, src} -- move an immediate or register value into a register.
@@ -55,6 +55,32 @@ Operands supported:
   \item Immediate operands: numeric literals (decimal) used directly.
   \item Label references used where labels are expected.
 \end{itemize}
+
+\section{Directives}
+The assembler supports the following directives for data definition and constants:
+\begin{itemize}
+  \item \texttt{DB val, ...} -- Define Bytes (8-bit). Supports string literals (e.g., \texttt{"hello"}).
+  \item \texttt{DW val} -- Define Word (16-bit, Little Endian).
+  \item \texttt{DD val} -- Define Double Word (32-bit, Little Endian).
+  \item \texttt{DQ val} -- Define Quad Word (64-bit, Little Endian).
+  \item \texttt{EQU / EQO expr} -- Define a constant symbol using an expression.
+\end{itemize}
+
+\subsection{Expressions}
+Directives like \texttt{EQU} support arithmetic expressions involving:
+\begin{itemize}
+  \item Integer literals and hex literals (0x prefix).
+  \item Current location counter \texttt{\$}.
+  \item Symbol references (including forward references to data labels).
+  \item Operators: \texttt{+}, \texttt{-}, \texttt{*}, \texttt{/}, \texttt{\%}.
+\end{itemize}
+
+Example:
+\begin{verbatim}
+msg db "hello", 0
+len equ $ - msg
+ptr dq msg
+\end{verbatim}
 
 \section{HOST and SYSCALL semantics}
 \subsection{HOST}
@@ -120,7 +146,13 @@ You can run assembly stored in the VFS using the host's exec mechanism. From the
 \begin{verbatim}
 ./program.asm
 \end{verbatim}
-or use the built-in host call from other contexts:
+
+You can also run programs non-interactively from the command line using the \texttt{--exec} (or \texttt{-c}) argument:
+\begin{verbatim}
+./StarChart --exec "./program.asm"
+\end{verbatim}
+
+To use the built-in host call from other contexts:
 \begin{verbatim}
 var host = new StarChart.Assembly.StarChartAssemblyHost();
 host.Call("exec:/path/to/program.asm", new StarChart.Assembly.AssemblyRuntimeContext());

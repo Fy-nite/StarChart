@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using Jakarada.Core;
 using Jakarada.Core.AST;
+using Jakarada.Core.Lexer;
 
 namespace StarChart.Assembly
 {
@@ -87,6 +88,8 @@ namespace StarChart.Assembly
     {
         private readonly AssemblyRuntimeContext _ctx;
         private readonly IAssemblyHost _host;
+        // Addresses for labels that refer to data/constants (populated during layout pass)
+        private Dictionary<string, long> _labelAddresses = new(StringComparer.OrdinalIgnoreCase);
 
         public AssemblyRuntime(IAssemblyHost? host = null, int memorySize = 64 * 1024)
         {
@@ -104,13 +107,163 @@ namespace StarChart.Assembly
 
         public void RunProgram(ProgramNode program)
         {
-            // Build a map of labels -> instruction index
-            var labelToIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            // Layout data directives (DB, etc.) and evaluate EQU/EQO constants so labels
+            // used as addresses/immediates can be resolved. Data is placed starting
+            // at address 0 and grows upward.
             var instructions = program.Instructions;
+            _labelAddresses.Clear();
+            var relocations = new List<Relocation>();
 
-            for (int i = 0; i < instructions.Count; i++)
+            // Pass 1: Allocate data addresses for labels on DB/DW/DD/DQ directives.
+            // We measure sizes to advance dataPtr, but we do NOT evaluate EQU yet.
+            var dataPtr = 0;
+            foreach (var ins in instructions)
             {
-                var ins = instructions[i];
+                var m = ins.Mnemonic.ToUpperInvariant();
+                if (m == "DB" || m == "DW" || m == "DD" || m == "DQ")
+                {
+                    if (!string.IsNullOrEmpty(ins.Label))
+                        _labelAddresses[ins.Label] = dataPtr;
+
+                    int size = 1;
+                    if (m == "DW") size = 2;
+                    else if (m == "DD") size = 4;
+                    else if (m == "DQ") size = 8;
+                    
+                    foreach (var op in ins.Operands)
+                    {
+                        if (op is Jakarada.Core.AST.StringOperand s)
+                        {
+                            // In DB, string takes len bytes
+                            var bytes = Encoding.UTF8.GetBytes(s.Value);
+                            dataPtr += bytes.Length;
+                        }
+                        else
+                        {
+                             // Immediate or LabelReference takes 'size' bytes
+                             dataPtr += size;
+                        }
+                    }
+                }
+            }
+
+            // Pass 2: Evaluate EQU/EQO/EQ directives.
+            // Now that all DB labels have addresses, we can resolve forward references
+            // like "VAL equ data_end - data_start".
+            // We must re-simulate dataPtr so '$' works correctly in expressions.
+            dataPtr = 0;
+            foreach (var ins in instructions)
+            {
+                var m = ins.Mnemonic.ToUpperInvariant();
+                if (m == "DB" || m == "DW" || m == "DD" || m == "DQ")
+                {
+                    int size = 1;
+                    if (m == "DW") size = 2;
+                    else if (m == "DD") size = 4;
+                    else if (m == "DQ") size = 8;
+                    
+                    foreach (var op in ins.Operands)
+                    {
+                        if (op is Jakarada.Core.AST.StringOperand s)
+                        {
+                            var bytes = Encoding.UTF8.GetBytes(s.Value);
+                            dataPtr += bytes.Length;
+                        }
+                        else
+                        {
+                             dataPtr += size;
+                        }
+                    }
+                }
+                else if (m == "EQO" || m == "EQU" || m == "EQ")
+                {
+                    if (!string.IsNullOrEmpty(ins.Label) && ins.DirectiveExprAST != null)
+                    {
+                        try
+                        {
+                            // Evaluate using collected labels (Pass 1) and any preceding EQUs (Pass 2)
+                            var val = EvaluateExpression(ins.DirectiveExprAST, _labelAddresses, dataPtr);
+                            _labelAddresses[ins.Label] = val;
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error evaluating directive for {ins.Label}: {ex.Message}");
+                        }
+                    }
+                }
+            }
+
+            // Pass 3: Write data to memory.
+            dataPtr = 0;
+            foreach (var ins in instructions)
+            {
+                var m = ins.Mnemonic.ToUpperInvariant();
+                if (m == "DB" || m == "DW" || m == "DD" || m == "DQ")
+                {
+                    int size = 1;
+                    if (m == "DW") size = 2;
+                    else if (m == "DD") size = 4;
+                    else if (m == "DQ") size = 8;
+
+                    foreach (var op in ins.Operands)
+                    {
+                        if (op is Jakarada.Core.AST.StringOperand s)
+                        {
+                            if (m != "DB") throw new InvalidOperationException("Strings only supported in DB directives");
+                            var bytes = Encoding.UTF8.GetBytes(s.Value);
+                            Array.Copy(bytes, 0, _ctx.Memory, dataPtr, bytes.Length);
+                            dataPtr += bytes.Length;
+                        }
+                        else if (op is Jakarada.Core.AST.ImmediateOperand imm)
+                        {
+                            WriteMemory(imm.Value, size, dataPtr);
+                            dataPtr += size;
+                        }
+                        else if (op is Jakarada.Core.AST.LabelReferenceOperand lr)
+                        {
+                            if (_labelAddresses.TryGetValue(lr.LabelName, out var addr))
+                            {
+                                WriteMemory(addr, size, dataPtr);
+                            }
+                            else
+                            {
+                                WriteMemory(0, size, dataPtr);
+                                relocations.Add(new Relocation { Address = dataPtr, Size = size, LabelName = lr.LabelName });
+                            }
+                            dataPtr += size;
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException($"Unsupported {m} operand type {op.GetType().Name}");
+                        }
+                    }
+                }
+            }
+
+            // Fixup pass
+            foreach (var rel in relocations)
+            {
+                if (_labelAddresses.TryGetValue(rel.LabelName, out var addr))
+                {
+                    WriteMemory(addr, rel.Size, rel.Address);
+                }
+            }
+
+            // Extract executable instructions
+            var execInstructions = new List<InstructionNode>();
+            foreach (var ins in instructions)
+            {
+                var m = ins.Mnemonic.ToUpperInvariant();
+                if (m == "DB" || m == "DW" || m == "DD" || m == "DQ" || m == "EQO" || m == "EQU" || m == "EQ")
+                    continue; // not executable
+                execInstructions.Add(ins);
+            }
+
+            // Build a map of labels -> instruction index for executable instructions
+            var labelToIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < execInstructions.Count; i++)
+            {
+                var ins = execInstructions[i];
                 if (!string.IsNullOrEmpty(ins.Label))
                     labelToIndex[ins.Label] = i;
             }
@@ -120,9 +273,9 @@ namespace StarChart.Assembly
             bool zf = false;
 
             int ip = 0;
-            while (ip >= 0 && ip < instructions.Count)
+            while (ip >= 0 && ip < execInstructions.Count)
             {
-                var ins = instructions[ip];
+                var ins = execInstructions[ip];
                 ip++; // default increment
 
                 var m = ins.Mnemonic.ToUpperInvariant();
@@ -307,6 +460,23 @@ namespace StarChart.Assembly
             return a == b;
         }
 
+        private void WriteMemory(long value, int size, int ptr)
+        {
+            for (int i = 0; i < size; i++)
+            {
+                if (ptr + i < _ctx.Memory.Length)
+                    _ctx.Memory[ptr + i] = (byte)(value & 0xFF);
+                value >>= 8;
+            }
+        }
+
+        private struct Relocation
+        {
+            public int Address;
+            public int Size;
+            public string LabelName;
+        }
+
         private long ReadOperandValue(OperandNode op)
         {
             switch (op)
@@ -316,13 +486,49 @@ namespace StarChart.Assembly
                 case ImmediateOperand imm:
                     return imm.Value;
                 case LabelReferenceOperand lr:
-                    // Labels can be used as immediates (address 0 by default)
-                    // Caller may extend this to return actual addresses mapped to labels.
+                    // If the label refers to allocated data/constant, return its address/value
+                    if (_labelAddresses.TryGetValue(lr.LabelName, out var addr))
+                        return addr;
+                    // otherwise labels used as immediates default to 0
                     return 0;
                 default:
                     throw new InvalidOperationException($"Unsupported operand type {op.GetType().Name}");
             }
 
+        }
+
+        private long EvaluateExpression(ExpressionNode node, Dictionary<string, long> labels, long currentAddress)
+        {
+            switch (node)
+            {
+                case LiteralExpression lit:
+                    return lit.Value;
+                case DollarExpression:
+                    return currentAddress;
+                case SymbolExpression sym:
+                    if (labels.TryGetValue(sym.Name, out var val))
+                        return val;
+                    throw new InvalidOperationException($"Undefined symbol in expression: {sym.Name}");
+                case UnaryExpression un:
+                     var opVal = EvaluateExpression(un.Operand, labels, currentAddress);
+                     if (un.Operator == TokenType.Minus) return -opVal;
+                     if (un.Operator == TokenType.Plus) return opVal;
+                     throw new InvalidOperationException($"Unsupported unary operator {un.Operator}");
+                case BinaryExpression bin:
+                    var left = EvaluateExpression(bin.Left, labels, currentAddress);
+                    var right = EvaluateExpression(bin.Right, labels, currentAddress);
+                    switch (bin.Operator)
+                    {
+                        case TokenType.Plus: return left + right;
+                        case TokenType.Minus: return left - right;
+                        case TokenType.Asterisk: return left * right;
+                        case TokenType.Slash: return left / right;
+                        case TokenType.Percent: return left % right;
+                        default: throw new InvalidOperationException($"Unknown operator {bin.Operator}");
+                    }
+                default:
+                    throw new InvalidOperationException($"Unknown expression node type {node.GetType().Name}");
+            }
         }
     }
 

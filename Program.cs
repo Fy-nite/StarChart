@@ -11,6 +11,16 @@ namespace StarChart
     {
         static void Main(string[] args)
         {
+            string? execCmd = null;
+            for (int i = 0; i < args.Length; i++)
+            {
+                if ((args[i] == "--exec" || args[i] == "-c") && i + 1 < args.Length)
+                {
+                    execCmd = args[i + 1];
+                    i++;
+                }
+            }
+
             // Prepare a VFS instance that the headless console shell can use.
             var vfs = new VfsManager();
             try
@@ -42,7 +52,10 @@ namespace StarChart
             VFSGlobal.Manager = vfs;
 
             // Run a simple headless console shell first. Typing 'startx' will return and start the GUI.
-            ConsoleShell.Run(vfs);
+            if (!ConsoleShell.Run(vfs, execCmd))
+            {
+                return;
+            }
 
             // Now start the MonoGame windowed runtime (W11)
             using var game = new AsmoV2.AsmoGameEngine("StarChart", 640, 480);
