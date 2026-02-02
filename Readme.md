@@ -1,71 +1,96 @@
-# StarChart
+# ⭐ StarChart
 
-StarChart is a custom runtime environment and operating system framework built on top of MonoGame and the AsmoV2 engine. It provides a virtual file system (VFS), a graphical user interface (GUI) with window compositing, a console shell, and various subsystems for building and running applications in a simulated OS environment.
+A **powerful OS framework** that brings retro computing dreams to life! StarChart is a custom runtime environment built on MonoGame and the AsmoV2 engine, featuring a complete virtual file system, gorgeous X11 style GUI, and a full-featured console shell. Run applications in a fully simulated operating system environment—all within your game!
 
-## Features
+## ✨ Features
 
-- **Virtual File System (VFS)**: Supports mounting physical and in-memory file systems, with symbolic links and directory operations.
-- **Graphical Runtime**: Hosts a W11-style display server that composites windows onto a canvas, allowing for resizable, fullscreen-capable applications.
-- **Console Shell**: Includes a headless console shell for initial interaction, with commands like `startx` to launch the GUI.
-- **Scheduler**: A round-robin scheduler for managing scheduled tasks and jobs.
-- **Modular Architecture**: Organized into subsystems like AppFramework, GPU, PTY, stdlib, and Systemd for extensibility.
-- **Plugin Support**: Supports plugins for extending functionality.
-- **Default Applications**: Comes with default apps provided in the StarChart-Software repository.
+- **🗂️ Virtual File System (VFS)**: Mount physical and in-memory file systems with symbolic links and advanced directory operations.
+- **🖼️ Graphical Runtime**: X11 style display server with stunning window compositing, resizable windows, and fullscreen capabilities.
+- **💻 Console Shell**: Powerful headless shell for interaction, featuring commands like `startw` to launch the GUI.
+- **⚡ Scheduler**: Smart round-robin task scheduler for managing background jobs and scheduled operations.
+- **🏗️ Modular Architecture**: Clean, extensible design with dedicated subsystems (AppFramework, GPU, PTY, stdlib, Systemd).
+- **🔌 Plugin System**: Easily extend functionality with custom plugins.
+- **📦 Default Applications**: Pre-loaded with essential apps (see StarChart-Software repo).
 
-## Project Structure
+## 🏗️ Project Structure
 
-- `Program.cs`: Entry point that sets up VFS, runs the console shell, and launches the MonoGame runtime.
-- `Runtime.cs`: Core runtime class that manages the display server, scheduler, and window compositing.
-- `AppFramework/`: Framework for building applications.
-- `Assembly/`: Assembly-related utilities.
-- `DefaultApps/`: Default applications included with StarChart.
-- `GPU/`: GPU-related abstractions and implementations.
-- `Plugins/`: Plugin system for extensions.
-- `PTY/`: Pseudo-terminal support.
-- `stdlib/`: Standard library components, including W11-specific modules.
-- `Systemd/`: Systemd-like service management.
+| Directory | Purpose |
+|-----------|---------|
+| `Program.cs` | Entry point—boots VFS, console shell, and MonoGame runtime |
+| `Runtime.cs` | Core engine managing display server, scheduler & compositing |
+| `AppFramework/` | Build powerful applications for StarChart |
+| `Assembly/` | Assembly utilities and tools |
+| `DefaultApps/` | Essential built-in applications |
+| `GPU/` | GPU abstractions and rendering backend |
+| `Plugins/` | Plugin system for custom extensions |
+| `PTY/` | Pseudo-terminal (pty) support |
+| `stdlib/` | Standard library with W11-specific modules |
+| `Systemd/` | Service management (systemd-like) |
 
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- .NET 10.0 SDK
-- Dependencies: AsmoV2 (VBlank.csproj), Adamantite libraries
+- **.NET 10.0 SDK** or higher
+- **Dependencies**: AsmoV2, Adamantite libraries
 
 ### Building
 
-1. Clone the repository.
-2. Navigate to the StarChart directory.
-3. Run `dotnet build` to build the project.
+```bash
+# Clone and navigate
+cd StarChart
+
+# Build the project
+dotnet build
+```
 
 ### Running
 
-1. Ensure the `root` directory exists in the output folder (e.g., `bin/Debug/net10.0/root`).
-2. Run `dotnet run` to start StarChart.
-3. The console shell will start first. Type `startx` to launch the GUI runtime.
+```bash
+# Make sure root directory exists
+# (e.g., bin/Debug/net10.0/root)
+
+# Start StarChart
+dotnet run
+
+# In the console shell, launch the GUI
+startx
+```
 
 ### Development
 
-- Use Visual Studio or VS Code with C# extensions.
-- The project uses MonoGame for graphics and input handling.
-- Extend functionality by adding to the subsystems or creating plugins.
+- Use **Visual Studio** or **VS Code** with C# extensions
+- Built on **MonoGame** for graphics and input
+- Extend by adding subsystems or creating plugins
+- Check out the examples folder for inspiration!
 
-## Dependencies
+## 📚 Dependencies
 
-- **AsmoV2**: The underlying game engine.
-- **Adamantite**: Provides VFS, GFX, GPU, and other core components.
-- **MonoGame**: For cross-platform game development and windowing.
+| Project | Role |
+|---------|------|
+| **AsmoV2** | Underlying game engine core |
+| **Adamantite** | VFS, graphics, GPU, and system libraries |
+| **MonoGame** | Cross-platform graphics and windowing |
 
-## Contributing
+## 🤝 Contributing
 
-Contributions are welcome! Please fork the repository and submit pull requests. Ensure code follows the project's style and includes appropriate tests.
+We'd love your contributions! Help bring the OS framework to the next level:
 
-## License
+1. **Fork** the repository
+2. **Create** a feature branch
+3. **Commit** your changes with clear messages
+4. **Push** to your fork
+5. **Submit** a pull request
 
-See LICENSE file in the repository root.
+Please ensure your code follows our style guidelines and includes appropriate tests. Check out our [ARCHITECTURE.md](ARCHITECTURE.md) for design patterns!
 
-## Related Projects
+## 📖 Related Projects
 
-- [StarChart-Software](https://github.com/your-repo/StarChart-Software): Default programs and applications for StarChart.
-- [AsmoV2](https://github.com/your-repo/AsmoV2): The core engine.
-- [Adamantite](https://github.com/your-repo/Adamantite): Core libraries.
+- **[StarChart-Software](https://github.com/fy-nite/StarChart-Software)** — Default programs & applications ecosystem
+- **[AsmoV2](https://github.com/fy-nite/AsmoV2)** — The core game engine
+- **[Adamantite](https://github.com/fy-nite/Adamantite)** — System libraries & abstractions
+
+## 📄 License
+
+See [LICENSE](LICENSE) file in the repository root.
+
