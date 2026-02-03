@@ -480,3 +480,8 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+docs/StarChartAssemblyManual.aux
+docs/StarChartAssemblyManual.out
+docs/StarChartAssemblyManual.pdf
+docs/StarChartAssemblyManual.synctex.gz
+docs/StarChartAssemblyManual.toc
