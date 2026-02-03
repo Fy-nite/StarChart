@@ -1,10 +1,10 @@
-﻿using AsmoV2;
+﻿using VBlank;
 using System;
 using System.IO;
 using System.Text;
 using Adamantite.VFS;
 using StarChart.Bin;
-
+using Adamantite.Util;
 namespace StarChart
 {
     internal class Program
@@ -13,6 +13,8 @@ namespace StarChart
         {
             string? execCmd = null;
             int? printFrames = null;
+            bool debug = false;
+            bool showHelp = false;
             for (int i = 0; i < args.Length; i++)
             {
                 if ((args[i] == "--exec" || args[i] == "-c") && i + 1 < args.Length)
@@ -20,11 +22,36 @@ namespace StarChart
                     execCmd = args[i + 1];
                     i++;
                 }
+                else if (args[i] == "--debug")
+                {
+                    debug = true;
+                }
+                else if (args[i] == "--help" || args[i] == "-h")
+                {
+                    showHelp = true;
+                }
                 else if ((args[i] == "--print-frames" || args[i] == "-p") && i + 1 < args.Length)
                 {
                     if (int.TryParse(args[i + 1], out var v)) printFrames = v;
                     i++;
                 }
+            }
+
+            if (showHelp)
+            {
+                Console.WriteLine("Usage: StarChart [options]");
+                Console.WriteLine("Options:");
+                Console.WriteLine("  --exec <cmd>       Run a shell command before launching GUI (startx)");
+                Console.WriteLine("  --print-frames <n> Print limited Draw() pixel-sample lines (useful for debugging)");
+                Console.WriteLine("  --debug            Enable verbose debug mode (sets ASMO_DEBUG=1)");
+                Console.WriteLine("  --help, -h         Show this help message");
+                return;
+            }
+
+            if (debug)
+            {
+                try { Environment.SetEnvironmentVariable("ASMO_DEBUG", "1"); } catch { }
+                DebugUtil.Debug("StarChart: debug mode enabled");
             }
 
             // Prepare a VFS instance that the headless console shell can use.
@@ -70,10 +97,10 @@ namespace StarChart
             }
 
             // Now start the MonoGame windowed runtime (W11)
-            using var game = new AsmoV2.AsmoGameEngine("StarChart", 1280, 800);
+            using var game = new VBlank.AsmoGameEngine("StarChart", 1280, 800);
 
             // Configure window policy so the engine will scale the canvas based on window size
-            game.Policy = new AsmoV2.AsmoGameEngine.WindowPolicy
+            game.Policy = new VBlank.AsmoGameEngine.WindowPolicy
             {
                 AllowUserResizing = true,
                 LockSize = false,
@@ -89,6 +116,19 @@ namespace StarChart
             {
                 Runtime.DrawPrintLimit = printFrames.Value;
             }
+            // Honor --debug by increasing draw logging if requested
+            try
+            {
+                if (debug)
+                {
+                    // If no explicit print limit set, enable more draw logs for debugging
+                    if (!printFrames.HasValue)
+                    {
+                        Runtime.DrawPrintLimit = 200;
+                    }
+                }
+            }
+            catch { }
             game.HostNativeGame(runtime);
             game.Run();
         }

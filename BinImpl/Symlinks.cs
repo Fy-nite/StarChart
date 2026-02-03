@@ -1,7 +1,7 @@
 using System;
 using StarChart.PTY;
 using Adamantite.VFS;
-using StarChart.stdlib.W11;
+using StarChart.Plugins;
 
 namespace StarChart.Bin
 {
@@ -20,7 +20,7 @@ namespace StarChart.Bin
         }
 
         // Try executing a script path on the supplied PTY. Returns true if handled.
-        public static bool TryExecuteScript(string path, IPty pty, VfsManager vfs, DisplayServer? server = null, Action<StarChart.Plugins.IStarChartApp>? registerApp = null)
+        public static bool TryExecuteScript(string path, IPty pty, VfsManager vfs, object? server = null, Action<IStarChartApp>? registerApp = null)
         {
             if (string.IsNullOrEmpty(path) || pty == null) return false;
             var key = NormalizeKey(path);
@@ -37,21 +37,6 @@ namespace StarChart.Bin
                         } 
                         catch { }
                         return true;
-                    case "xterm":
-                        // If a DisplayServer is available, create an XTerm window instead
-                        if (server != null)
-                        {
-                            try
-                            {
-                                var xt = new XTerm(server, "xterm", "XTerm", 80, 24, 10, 10, 1);
-                                xt.Render();
-                                registerApp?.Invoke(xt);
-                                try { var sh = new StarChart.stdlib.W11.Shell(xt); } catch { }
-                            }
-                            catch { }
-                            return true;
-                        }
-                        break;
                 }
             }
             catch { }
@@ -61,8 +46,8 @@ namespace StarChart.Bin
         // Try spawning a session for a login shell name (e.g. 'sh' or 'xterm'). Returns true if handled.
         // If `currentVt` or `currentXterm` is provided, prefer reusing that terminal
         // to start the shell instead of creating a new fullscreen VT.
-        public static bool TrySpawnForLogin(string shellName, Runtime runtime, DisplayServer? server, VfsManager? vfs, string username,
-            Adamantite.GPU.VirtualTerminal? currentVt = null, StarChart.stdlib.W11.XTerm? currentXterm = null)
+        public static bool TrySpawnForLogin(string shellName, Runtime runtime, object? server, VfsManager? vfs, string username,
+            Adamantite.GPU.VirtualTerminal? currentVt = null, object? currentXterm = null)
         {
             if (string.IsNullOrEmpty(shellName)) return false;
             var key = NormalizeKey(shellName);
@@ -84,11 +69,6 @@ namespace StarChart.Bin
                                 catch { }
                                 return true;
                             }
-                            if (currentXterm != null)
-                            {
-                                try { var sh = new StarChart.stdlib.W11.Shell(currentXterm); } catch { }
-                                return true;
-                            }
                             // Fallback: create a fullscreen VirtualTerminal and run ShProgram on it
                             var userVt = new Adamantite.GPU.VirtualTerminal(80, 20);
                             userVt.DefaultForeground = 0xFFFFFFFFu;
@@ -106,22 +86,6 @@ namespace StarChart.Bin
                             return true;
                         }
                         catch { return false; }
-
-                    case "xterm":
-                        if (server != null)
-                        {
-                            try
-                            {
-                                int x = 10, y = 10;
-                                var xt = new XTerm(server, "xterm", username, 80, 24, x, y, 1, fontKind: XTerm.FontKind.Clean8x8);
-                                xt.Render();
-                                try { var sh = new StarChart.stdlib.W11.Shell(xt); } catch { }
-                                runtime.RegisterApp(xt);
-                                return true;
-                            }
-                            catch { }
-                        }
-                        break;
                 }
             }
             catch { }
@@ -153,7 +117,6 @@ namespace StarChart.Bin
                 try { if (!vfs.Exists("/bin")) vfs.CreateDirectory("/bin"); } catch { }
 
                 TryWrite("/bin/sh", "builtin:sh\n# source: PTY/ShProgram.cs\n");
-                TryWrite("/bin/xterm", "builtin:xterm\n# source: stdlib/W11/XTerm.cs\n");
             }
             catch { }
         }

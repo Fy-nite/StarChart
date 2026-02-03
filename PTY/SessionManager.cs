@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Adamantite.VFS;
-using StarChart.stdlib.W11;
 using StarChart.PTY;
+using StarChart.Bin;
+using StarChart.Plugins;
 
 namespace StarChart.PTY
 {
@@ -11,12 +12,12 @@ namespace StarChart.PTY
     {
         readonly Dictionary<string, (VirtualPty pty, object host)> _sessions = new(StringComparer.OrdinalIgnoreCase);
         readonly VfsManager _vfs;
-        readonly DisplayServer _server;
-        Action<StarChart.Plugins.IStarChartApp>? _onRegisterApp;
+        readonly object? _windowContext;
+        Action<IStarChartApp>? _onRegisterApp;
 
-        public SessionManager(DisplayServer server, VfsManager vfs, Action<StarChart.Plugins.IStarChartApp>? onRegisterApp = null)
+        public SessionManager(object? windowContext, VfsManager vfs, Action<IStarChartApp>? onRegisterApp = null)
         {
-            _server = server ?? throw new ArgumentNullException(nameof(server));
+            _windowContext = windowContext;
             _vfs = vfs ?? throw new ArgumentNullException(nameof(vfs));
             _onRegisterApp = onRegisterApp;
         }
@@ -42,9 +43,7 @@ namespace StarChart.PTY
             }
             catch { }
 
-            // Always attach an interactive Shell to the VT for user input
-            var sh = new StarChart.stdlib.W11.Shell(vt);
-            _sessions[username] = (pty, sh);
+            _sessions[username] = (pty, "shell");
 
             return (pty, vt);
         }
@@ -54,7 +53,7 @@ namespace StarChart.PTY
             // Allow built-in symlink handlers to intercept script execution first
             try
             {
-                if (StarChart.Bin.Symlinks.TryExecuteScript(scriptPath, pty, _vfs, _server, _onRegisterApp))
+                if (StarChart.Bin.Symlinks.TryExecuteScript(scriptPath, pty, _vfs, _windowContext, _onRegisterApp))
                     return;
             }
             catch { }

@@ -1,6 +1,6 @@
 # ⭐ StarChart
 
-A **powerful OS framework** that brings retro computing dreams to life! StarChart is a custom runtime environment built on MonoGame and the AsmoV2 engine, featuring a complete virtual file system, gorgeous X11 style GUI, and a full-featured console shell. Run applications in a fully simulated operating system environment—all within your game!
+A **powerful OS framework** that brings retro computing dreams to life! StarChart is a custom runtime environment built on MonoGame and the VBlank engine, featuring a complete virtual file system, gorgeous X11 style GUI, and a full-featured console shell. Run applications in a fully simulated operating system environment—all within your game!
 
 ## ✨ Features
 
@@ -32,7 +32,7 @@ A **powerful OS framework** that brings retro computing dreams to life! StarChar
 ### Prerequisites
 
 - **.NET 10.0 SDK** or higher
-- **Dependencies**: AsmoV2, Adamantite libraries
+- **Dependencies**: VBlank, Adamantite libraries
 
 ### Building
 
@@ -68,7 +68,7 @@ startx
 
 | Project | Role |
 |---------|------|
-| **AsmoV2** | Underlying game engine core |
+| **VBlank** | Underlying game engine core |
 | **Adamantite** | VFS, graphics, GPU, and system libraries |
 | **MonoGame** | Cross-platform graphics and windowing |
 
@@ -87,7 +87,7 @@ Please ensure your code follows our style guidelines and includes appropriate te
 ## 📖 Related Projects
 
 - **[StarChart-Software](https://github.com/fy-nite/StarChart-Software)** — Default programs & applications ecosystem
-- **[AsmoV2](https://github.com/fy-nite/AsmoV2)** — The core game engine
+- **[VBlank](https://github.com/fy-nite/VBlank)** — The core game engine
 - **[Adamantite](https://github.com/fy-nite/Adamantite)** — System libraries & abstractions
 
 ## 📄 License

@@ -6,7 +6,6 @@ using System.Reflection;
 using System.Runtime.Loader;
 using StarChart.PTY;
 using StarChart.Plugins;
-using StarChart.stdlib.W11;
 
 namespace StarChart.Bin
 {
@@ -14,7 +13,7 @@ namespace StarChart.Bin
     // Reads input lines, executes simple commands, and writes output.
     public class ShProgram : IStarChartApp
     {
-        public Window? MainWindow => null;
+        public object? MainWindow => null;
         public void Initialize(PluginContext context) { }
         public void Start() { }
         public void Stop() { }

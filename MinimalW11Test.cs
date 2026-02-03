@@ -1,7 +1,7 @@
 using Adamantite.GFX;
 using Microsoft.Xna.Framework.Graphics;
 using System;
-
+using Adamantite.Util;
 namespace StarChart
 {
     /// <summary>
@@ -16,7 +16,7 @@ namespace StarChart
         public void Init(Canvas surface)
         {
             _canvas = surface ?? throw new ArgumentNullException(nameof(surface));
-            Console.Error.WriteLine($"MinimalW11Test: Init canvas {_canvas.width}x{_canvas.height}");
+            DebugUtil.Debug($"MinimalW11Test: Init canvas {_canvas.width}x{_canvas.height}");
         }
 
         public void Update(double deltaTime)
@@ -32,7 +32,7 @@ namespace StarChart
             }
             _initialized = true;
 
-            Console.Error.WriteLine("MinimalW11Test: Drawing test rectangles...");
+            DebugUtil.Debug("MinimalW11Test: Drawing test rectangles...");
 
             // Draw a red rectangle (top-left)
             DrawRect(_canvas, 50, 50, 200, 150, 0xFFFF0000); // Red
@@ -46,7 +46,7 @@ namespace StarChart
             // Draw a yellow rectangle (overlap test)
             DrawRect(_canvas, 300, 200, 150, 100, 0xFFFFFF00); // Yellow
 
-            Console.Error.WriteLine("MinimalW11Test: Rectangles drawn. Marking canvas dirty.");
+            DebugUtil.Debug("MinimalW11Test: Rectangles drawn. Marking canvas dirty.");
             
             // Verify pixels were written
             try
@@ -57,17 +57,17 @@ namespace StarChart
                 uint v0 = ((uint)c0.A << 24) | ((uint)c0.R << 16) | ((uint)c0.G << 8) | c0.B;
                 uint v1 = ((uint)c1.A << 24) | ((uint)c1.R << 16) | ((uint)c1.G << 8) | c1.B;
                 uint v2 = ((uint)c2.A << 24) | ((uint)c2.R << 16) | ((uint)c2.G << 8) | c2.B;
-                Console.Error.WriteLine($"MinimalW11Test: Canvas pixels after draw: first=0x{v0:X8} mid=0x{v1:X8} last=0x{v2:X8}");
+                DebugUtil.Debug($"MinimalW11Test: Canvas pixels after draw: first=0x{v0:X8} mid=0x{v1:X8} last=0x{v2:X8}");
                 
                 // Check a pixel we know we drew (red rect at 50,50)
                 int redIdx = 50 * _canvas.width + 50;
                 var cRed = _canvas.PixelData[redIdx];
                 uint vRed = ((uint)cRed.A << 24) | ((uint)cRed.R << 16) | ((uint)cRed.G << 8) | cRed.B;
-                Console.Error.WriteLine($"MinimalW11Test: Red pixel at (50,50) idx={redIdx} value=0x{vRed:X8} expected=0xFFFF0000");
+                DebugUtil.Debug($"MinimalW11Test: Red pixel at (50,50) idx={redIdx} value=0x{vRed:X8} expected=0xFFFF0000");
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"MinimalW11Test: Pixel check failed: {ex.Message}");
+                DebugUtil.Debug($"MinimalW11Test: Pixel check failed: {ex.Message}");
             }
             
             _canvas.MarkDirtyRect(0, 0, _canvas.width, _canvas.height);

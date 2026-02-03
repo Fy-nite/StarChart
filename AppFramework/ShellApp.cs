@@ -3,7 +3,6 @@ using StarChart.Plugins;
 using StarChart.Bin;
 using StarChart.PTY;
 using Adamantite.VFS;
-using StarChart.stdlib.W11;
 
 namespace StarChart.AppFramework
 {
@@ -22,7 +21,7 @@ namespace StarChart.AppFramework
             _vfs = vfs;
         }
 
-        public Window? MainWindow => null;
+        public object? MainWindow => null;
 
         public void Initialize(PluginContext context)
         {

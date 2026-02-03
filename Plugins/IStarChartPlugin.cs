@@ -1,5 +1,4 @@
 using System;
-using StarChart.stdlib.W11;
 
 namespace StarChart.Plugins
 {
@@ -8,8 +7,14 @@ namespace StarChart.Plugins
     /// </summary>
     public class PluginContext
     {
-        public DisplayServer? DisplayServer { get; set; }
+        // Opaque context for the windowing system (e.g. W11 DisplayServer)
+        public object? WindowingContext { get; set; }
+        
+        // The active graphics subsystem
+        public IGraphicsSubsystem? Graphics { get; set; }
+
         public Adamantite.VFS.VfsManager? VFS { get; set; }
+
         public string[] Arguments { get; set; } = Array.Empty<string>();
         public string WorkingDirectory { get; set; } = "/";
         // PATH entries made available to plugins (VFS paths)
@@ -44,31 +49,20 @@ namespace StarChart.Plugins
     }
 
     /// <summary>
-    /// Interface for StarChart applications.
+    /// Interface for StarChart applications (Generic).
     /// </summary>
     public interface IStarChartApp : IStarChartPlugin
     {
         /// <summary>
         /// Main window of the application (if any).
+        /// Returns opaque object (typically StarChart.stdlib.W11.Windowing.Window).
         /// </summary>
-        Window? MainWindow { get; }
+        object? MainWindow { get; }
     }
 
-    /// <summary>
-    /// Interface for StarChart window managers.
-    /// </summary>
-    public interface IStarChartWindowManager : IStarChartPlugin
-    {
-        /// <summary>
-        /// Update the window manager (called each frame if needed).
-        /// </summary>
-        void Update();
 
-        /// <summary>
-        /// Handle mouse input.
-        /// </summary>
-        void HandleMouse(int x, int y, bool leftDown, bool leftPressed, bool leftReleased);
-    }
+
+
 
     /// <summary>
     /// Interface for StarChart desktop environments.
@@ -111,5 +105,21 @@ namespace StarChart.Plugins
         /// Update the service (called periodically).
         /// </summary>
         void Update();
+    }
+
+    /// <summary>
+    /// Interface for StarChart window managers.
+    /// </summary>
+    public interface IStarChartWindowManager : IStarChartPlugin
+    {
+        /// <summary>
+        /// Called every frame to update the window manager logic.
+        /// </summary>
+        void Update();
+
+        /// <summary>
+        /// Handle mouse input.
+        /// </summary>
+        void HandleMouse(int x, int y, bool leftDown, bool leftPressed, bool leftReleased);
     }
 }
