@@ -5,13 +5,20 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.Loader;
 using StarChart.PTY;
+using StarChart.Plugins;
+using StarChart.stdlib.W11;
 
 namespace StarChart.Bin
 {
     // Built-in /bin/sh implementation as a C# program that runs on a PTY.
     // Reads input lines, executes simple commands, and writes output.
-    public class ShProgram
+    public class ShProgram : IStarChartApp
     {
+        public Window? MainWindow => null;
+        public void Initialize(PluginContext context) { }
+        public void Start() { }
+        public void Stop() { }
+
         readonly System.Threading.Tasks.TaskCompletionSource<int> _exitTcs = new(System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly IPty _pty;
         private readonly Adamantite.VFS.VfsManager _vfs;

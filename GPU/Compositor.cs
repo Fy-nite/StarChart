@@ -27,6 +27,11 @@ namespace Adamantite.GPU
 
                 var c = w.Canvas;
                 if (c == null) continue;
+                try
+                {
+                    Console.Error.WriteLine($"Compositor: window '{w.Title}' id={w.XID} mapped={w.IsMapped} dirty={c.IsDirty} size={c.Width}x{c.Height}");
+                }
+                catch { }
 
                 // ensure we have a cached surface for this window's render id
                 if (!_cache.TryGetValue(w.RenderId, out var surf) || surf.Width != c.Width || surf.Height != c.Height)
@@ -48,6 +53,36 @@ namespace Adamantite.GPU
                     var buf = c.PixelBuffer;
                     int cw = c.Width;
 
+                    // For debugging: if this is the grid-test window, force a full copy
+                    if (string.Equals(w.Title, "grid-test", StringComparison.OrdinalIgnoreCase))
+                    {
+                        dx = 0; dy = 0; dw = c.Width; dh = c.Height;
+                        try { Console.Error.WriteLine($"Compositor: forcing full copy for window id={w.XID} title={w.Title}"); } catch { }
+                    }
+
+                    // Diagnostic: sample raw canvas bytes at first/mid/last positions so we can
+                    // compare the source bytes with what we store into surf.Pixels.
+                    try
+                    {
+                        if (buf != null && buf.Length >= 4)
+                        {
+                            int fx = 0, fy = 0;
+                            int mx = Math.Max(0, c.Width / 2), my = Math.Max(0, c.Height / 2);
+                            int lx = Math.Max(0, c.Width - 1), ly = Math.Max(0, c.Height - 1);
+                            int fs = (fy * cw + fx) * 4;
+                            int ms = (my * cw + mx) * 4;
+                            int ls = (ly * cw + lx) * 4;
+                            if (fs + 3 < buf.Length && ms + 3 < buf.Length && ls + 3 < buf.Length)
+                            {
+                                byte f0 = buf[fs + 0]; byte f1 = buf[fs + 1]; byte f2 = buf[fs + 2]; byte f3 = buf[fs + 3];
+                                byte m0 = buf[ms + 0]; byte m1 = buf[ms + 1]; byte m2 = buf[ms + 2]; byte m3 = buf[ms + 3];
+                                byte l0 = buf[ls + 0]; byte l1 = buf[ls + 1]; byte l2 = buf[ls + 2]; byte l3 = buf[ls + 3];
+                                Console.Error.WriteLine($"Compositor: canvas-bytes id={w.XID} first=[{f0:X2},{f1:X2},{f2:X2},{f3:X2}] mid=[{m0:X2},{m1:X2},{m2:X2},{m3:X2}] last=[{l0:X2},{l1:X2},{l2:X2},{l3:X2}]");
+                            }
+                        }
+                    }
+                    catch { }
+
                     for (int yy = 0; yy < dh; yy++)
                     {
                         int srcRow = (dy + yy) * cw * 4;
@@ -56,16 +91,29 @@ namespace Adamantite.GPU
                         {
                             int sx = srcRow + (dx + xx) * 4;
                             int di = dstRow + (dx + xx);
-                            byte a = buf[sx + 0];
-                            byte r = buf[sx + 1];
-                            byte g = buf[sx + 2];
-                            byte b = buf[sx + 3];
+                            byte r = buf[sx + 0];
+                            byte g = buf[sx + 1];
+                            byte b = buf[sx + 2];
+                            byte a = buf[sx + 3];
                             surf.Pixels[di] = ((uint)a << 24) | ((uint)r << 16) | ((uint)g << 8) | b;
                         }
                     }
 
                     c.ClearDirty();
                 }
+
+                // Sample the cached surface so we can see what was copied from the client
+                try
+                {
+                    if (surf != null && surf.Pixels != null && surf.Pixels.Length > 0)
+                    {
+                        uint sf = surf.Pixels[0];
+                        uint sm = surf.Pixels[surf.Pixels.Length / 2];
+                        uint sl = surf.Pixels[surf.Pixels.Length - 1];
+                        Console.Error.WriteLine($"Compositor: surf-sample id={w.XID} first=0x{sf:X8} mid=0x{sm:X8} last=0x{sl:X8}");
+                    }
+                }
+                catch { }
 
                 // Draw into target. Respect window scale (onscreen size = canvas size * scale)
                 int scale = Math.Max(1, w.Scale);

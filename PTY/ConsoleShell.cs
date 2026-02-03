@@ -45,7 +45,9 @@ namespace StarChart.Bin
                     case "startx":
                     case "startw11":
                     case "x":
-                        return true; 
+                        // Signal that the user requested the graphical W11 environment
+                        StarChart.ShellControl.StartGraphicalRequested = true;
+                        return true;
                     case "exit":
                     case "quit":
                         Environment.Exit(0);

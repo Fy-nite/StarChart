@@ -1,10 +1,21 @@
 using System;
 using System.Collections.Generic;
+using StarChart.Plugins;
 
 namespace StarChart.stdlib.W11
 {
-    public class XTerm
+    public class XTerm : IStarChartApp, IScheduledTask
     {
+        // IStarChartApp implementation
+        public Window? MainWindow => Window;
+        public bool IsComplete => Window.IsDestroyed;
+
+        public void Initialize(PluginContext context) { }
+        public void Start() { }
+        public void Stop() { _server.DestroyWindow(Window); }
+
+        public void Execute(double deltaTime) => Update(deltaTime);
+
         public enum FontKind
         {
             Small4x6,

@@ -47,7 +47,7 @@ namespace StarChart.stdlib.W11
 
         public string ReadLine()
         {
-            return null;
+            return string.Empty;
         }
     }
 }

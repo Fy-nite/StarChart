@@ -173,7 +173,9 @@ namespace StarChart.stdlib.W11
                                 found = true;
                                 var shellName = parts.Length > 1 ? parts[1] : "sh";
                                 // start the requested shell: if it's 'w11' start W11,
-                                // otherwise spawn an XTerm and attach the interactive Shell.
+                                // otherwise consult the Symlinks registry which can spawn
+                                // built-in programs like 'sh' or 'xterm'. If unhandled,
+                                // fall back to spawning a fullscreen VT + Shell.
                                 if (string.Equals(shellName, "w11", StringComparison.OrdinalIgnoreCase) ||
                                     string.Equals(shellName, "startw", StringComparison.OrdinalIgnoreCase))
                                 {
@@ -183,26 +185,36 @@ namespace StarChart.stdlib.W11
                                 }
                                 else
                                 {
-                                    // Spawn a fullscreen VirtualTerminal for the user instead of an XTerm
+                                    bool handled = false;
                                     try
                                     {
-                                        var userVt = new VirtualTerminal(80, 20);
-                                        userVt.DefaultForeground = 0xFFFFFFFFu;
-                                        userVt.DefaultBackground = 0xFF000000u;
-                                        userVt.FillScreen = true;
-                                        userVt.WriteLine($"Login: {username}");
-                                        // Attach shell to the VT
-                                        try { var sh = new Shell(userVt); } catch { }
-                                        // Let the runtime know about the fullscreen VT so it can render/route input
-                                        try { _runtime.AttachVirtualTerminal(userVt); } catch { }
-
-                                        if (_vterm != null) _vterm.WriteLine($"Login succeeded. Started session for {username} in VirtualTerminal.");
-                                        else if (_xterm != null) _xterm.WriteLine($"Login succeeded. Started session for {username} in VirtualTerminal.");
+                                        handled = StarChart.Bin.Symlinks.TrySpawnForLogin(shellName, _runtime, _runtime.Server, Adamantite.VFS.VFSGlobal.Manager, username, _vterm, _xterm);
                                     }
-                                    catch (Exception ex)
+                                    catch { handled = false; }
+
+                                    if (!handled)
                                     {
-                                        if (_vterm != null) _vterm.WriteLine("Failed to start user session: " + ex.Message);
-                                        else if (_xterm != null) _xterm.WriteLine("Failed to start user session: " + ex.Message);
+                                        // Spawn a fullscreen VirtualTerminal for the user instead of an XTerm
+                                        try
+                                        {
+                                            var userVt = new VirtualTerminal(80, 20);
+                                            userVt.DefaultForeground = 0xFFFFFFFFu;
+                                            userVt.DefaultBackground = 0xFF000000u;
+                                            userVt.FillScreen = true;
+                                            userVt.WriteLine($"Login: {username}");
+                                            // Attach shell to the VT
+                                            try { var sh = new Shell(userVt); } catch { }
+                                            // Let the runtime know about the fullscreen VT so it can render/route input
+                                            try { _runtime.AttachVirtualTerminal(userVt); } catch { }
+
+                                            if (_vterm != null) _vterm.WriteLine($"Login succeeded. Started session for {username} in VirtualTerminal.");
+                                            else if (_xterm != null) _xterm.WriteLine($"Login succeeded. Started session for {username} in VirtualTerminal.");
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            if (_vterm != null) _vterm.WriteLine("Failed to start user session: " + ex.Message);
+                                            else if (_xterm != null) _xterm.WriteLine("Failed to start user session: " + ex.Message);
+                                        }
                                     }
                                 }
 
@@ -229,6 +241,7 @@ namespace StarChart.stdlib.W11
                             {
                                 var xt = new XTerm(server, "xterm", username, 80, 24, 10, 10, 1, fontKind: XTerm.FontKind.Clean8x8);
                                 xt.Render();
+                                _runtime.RegisterApp(xt);
                                 try { var sh = new Shell(xt); } catch { }
                                 if (_vterm != null) _vterm.WriteLine($"Login succeeded. Started session for {username} in XTerm.");
                                 else if (_xterm != null) _xterm.WriteLine($"Login succeeded. Started session for {username} in XTerm.");

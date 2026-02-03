@@ -12,11 +12,13 @@ namespace StarChart.PTY
         readonly Dictionary<string, (VirtualPty pty, object host)> _sessions = new(StringComparer.OrdinalIgnoreCase);
         readonly VfsManager _vfs;
         readonly DisplayServer _server;
+        Action<StarChart.Plugins.IStarChartApp>? _onRegisterApp;
 
-        public SessionManager(DisplayServer server, VfsManager vfs)
+        public SessionManager(DisplayServer server, VfsManager vfs, Action<StarChart.Plugins.IStarChartApp>? onRegisterApp = null)
         {
             _server = server ?? throw new ArgumentNullException(nameof(server));
             _vfs = vfs ?? throw new ArgumentNullException(nameof(vfs));
+            _onRegisterApp = onRegisterApp;
         }
 
         // Create a session and return the PTY and its backing VirtualTerminal.
@@ -49,9 +51,18 @@ namespace StarChart.PTY
 
         private void ExecuteScript(string scriptPath, IPty pty)
         {
+            // Allow built-in symlink handlers to intercept script execution first
+            try
+            {
+                if (StarChart.Bin.Symlinks.TryExecuteScript(scriptPath, pty, _vfs, _server, _onRegisterApp))
+                    return;
+            }
+            catch { }
+
             if (scriptPath == "/bin/sh")
             {
                 var sh = new StarChart.Bin.ShProgram(pty, _vfs);
+                _onRegisterApp?.Invoke(sh);
             }
         }
 

@@ -1,0 +1,203 @@
+\documentclass[11pt,a4paper]{article}
+
+% ----------------------------
+% Fonts & Typography
+% ----------------------------
+\usepackage{fontspec}
+
+\usepackage{microtype}
+\usepackage{setspace}
+\setstretch{1.15}
+
+% ----------------------------
+% Colors
+% ----------------------------
+\usepackage{xcolor}
+\definecolor{FinitePurple}{HTML}{6B4EFF}
+\definecolor{FiniteBlue}{HTML}{4FA3FF}
+\definecolor{FiniteGreen}{HTML}{3ECF8E}
+\definecolor{FiniteYellow}{HTML}{F6C177}
+\definecolor{FiniteRed}{HTML}{E45858}
+\definecolor{FiniteGray}{HTML}{2E2E38}
+
+% ----------------------------
+% Page Layout
+% ----------------------------
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{titlesec}
+\usepackage{parskip}
+
+\titleformat{\section}
+{\Large\bfseries\color{FinitePurple}}
+{\thesection}{1em}{}
+
+\titleformat{\subsection}
+{\large\bfseries\color{FiniteBlue}}
+{\thesubsection}{1em}{}
+
+% ----------------------------
+% Header / Footer
+% ----------------------------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textbf{Finite Tutorials}}
+\fancyhead[R]{\thepage}
+\fancyfoot[L]{\textit{finite.run}}
+
+% ----------------------------
+% Links
+% ----------------------------
+\usepackage{hyperref}
+\hypersetup{
+	colorlinks=true,
+	linkcolor=FinitePurple,
+	urlcolor=FiniteBlue,
+	citecolor=FiniteGreen
+}
+
+% ----------------------------
+% Code Blocks
+% ----------------------------
+\usepackage{listings}
+\lstdefinestyle{finite}{
+	backgroundcolor=\color{FiniteGray!5},
+	basicstyle=\ttfamily\small,
+	keywordstyle=\color{FinitePurple}\bfseries,
+	commentstyle=\color{FiniteGreen},
+	stringstyle=\color{FiniteYellow},
+	frame=single,
+	rulecolor=\color{FiniteGray!30},
+	breaklines=true,
+	tabsize=2
+}
+\lstset{style=finite}
+
+% ----------------------------
+% Callout Boxes
+% ----------------------------
+\usepackage{tcolorbox}
+\tcbuselibrary{breakable}
+
+\newtcolorbox{infobox}{
+	colback=FiniteBlue!8,
+	colframe=FiniteBlue,
+	title=Info,
+	breakable
+}
+
+\newtcolorbox{warningbox}{
+	colback=FiniteRed!8,
+	colframe=FiniteRed,
+	title=Warning,
+	breakable
+}
+
+\newtcolorbox{tipbox}{
+	colback=FiniteGreen!8,
+	colframe=FiniteGreen,
+	title=Tip,
+	breakable
+}
+
+\newtcolorbox{examplebox}{
+	colback=FinitePurple!6,
+	colframe=FinitePurple,
+	title=Example,
+	breakable
+}
+
+% ----------------------------
+% Title Page
+% ----------------------------
+\usepackage{tikz}
+\newcommand{\maketutorialtitle}{
+	\begin{center}
+		\vspace*{2cm}
+		{\Huge\bfseries\color{FinitePurple} \TutorialTitle \par}
+		\vspace{0.5cm}
+		{\Large\color{FiniteGray} \TutorialSubtitle \par}
+		\vspace{1.5cm}
+		{\large \TutorialAuthor}
+		\vfill
+		{\small © \TutorialYear\ Finite — Free Forever Software}
+		\newpage
+	\end{center}
+}
+
+% ----------------------------
+% Metadata
+% ----------------------------
+\newcommand{\TutorialTitle}{Your Tutorial Title}
+\newcommand{\TutorialSubtitle}{A short, clear description}
+\newcommand{\TutorialAuthor}{Finite Documentation Team}
+\newcommand{\TutorialYear}{2026}
+
+% ----------------------------
+% Document
+% ----------------------------
+\begin{document}
+	
+	\maketutorialtitle
+	
+	\section{Introduction}
+	
+	Welcome! This tutorial will guide you through \textbf{something cool}.
+	By the end, you’ll understand:
+	
+	\begin{itemize}
+		\item What the thing is
+		\item Why it exists
+		\item How to use it safely
+	\end{itemize}
+	
+	\begin{infobox}
+		This tutorial assumes basic familiarity with Linux and command-line tools.
+	\end{infobox}
+	
+	\section{Getting Started}
+	
+	\subsection{Installation}
+	
+	Run the following command:
+	
+	\begin{lstlisting}[language=bash]
+		sudo pacman -S finite-toolkit
+	\end{lstlisting}
+	
+	\begin{warningbox}
+		Do NOT run this as root unless explicitly told to.
+	\end{warningbox}
+	
+	\subsection{Configuration}
+	
+	Edit the config file:
+	
+	\begin{lstlisting}asdsd
+	\end{lstlisting}
+	
+	\begin{tipbox}
+		Keep configs under version control — future you will thank you.
+	\end{tipbox}
+	
+	\section{Example Workflow}
+	
+	\begin{examplebox}
+		A typical workflow looks like this:
+		\begin{enumerate}
+			\item Initialize the project
+			\item Run the engine
+			\item Debug visually
+		\end{enumerate}
+	\end{examplebox}
+	
+	\section{Next Steps}
+	
+	Check out:
+	\begin{itemize}
+		\item \href{https://global.finite.ovh/wiki}{Finite Wiki}
+		\item Advanced tutorials
+		\item Internal tooling docs
+	\end{itemize}
+	
+\end{document}

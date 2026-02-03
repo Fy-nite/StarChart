@@ -12,11 +12,17 @@ namespace StarChart
         static void Main(string[] args)
         {
             string? execCmd = null;
+            int? printFrames = null;
             for (int i = 0; i < args.Length; i++)
             {
                 if ((args[i] == "--exec" || args[i] == "-c") && i + 1 < args.Length)
                 {
                     execCmd = args[i + 1];
+                    i++;
+                }
+                else if ((args[i] == "--print-frames" || args[i] == "-p") && i + 1 < args.Length)
+                {
+                    if (int.TryParse(args[i + 1], out var v)) printFrames = v;
                     i++;
                 }
             }
@@ -45,6 +51,12 @@ namespace StarChart
                     memFs.CreateSymlink("sh", "/mem/bin/sh");
                 }
                 catch { }
+                // Register small symlink marker files for builtin programs
+                try
+                {
+                    StarChart.Bin.Symlinks.RegisterDefaultSymlinks(vfs);
+                }
+                catch { }
             }
             catch { }
 
@@ -58,7 +70,7 @@ namespace StarChart
             }
 
             // Now start the MonoGame windowed runtime (W11)
-            using var game = new AsmoV2.AsmoGameEngine("StarChart", 640, 480);
+            using var game = new AsmoV2.AsmoGameEngine("StarChart", 1280, 800);
 
             // Configure window policy so the engine will scale the canvas based on window size
             game.Policy = new AsmoV2.AsmoGameEngine.WindowPolicy
@@ -69,7 +81,14 @@ namespace StarChart
                 SizeToDisplay = false,
                 AltEnterToggle = true
             };
-            game.HostNativeGame(new Runtime());
+            // Pass whether the shell requested graphical startup so the Runtime can
+            // avoid creating a fullscreen VT session and instead start W11 properly.
+            var runtime = new Runtime(ShellControl.StartGraphicalRequested);
+            if (printFrames.HasValue)
+            {
+                Runtime.DrawPrintLimit = printFrames.Value;
+            }
+            game.HostNativeGame(runtime);
             game.Run();
         }
     }

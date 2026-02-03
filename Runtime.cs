@@ -13,6 +13,7 @@ using Microsoft.Xna.Framework.Input;
 using Adamantite.GPU;
 using Microsoft.Xna.Framework.Graphics;
 using StarChart.PTY;
+using StarChart.Plugins;
 
 namespace StarChart
 {
@@ -51,15 +52,23 @@ namespace StarChart
 
     public class Runtime : IConsoleGameWithSpriteBatch, IEngineHost
     {
+        private readonly bool _skipDefaultVt;
         DisplayServer? _server;
         private Scheduler _scheduler = new Scheduler();
             // Expose the scheduler for external modules
             public Scheduler Scheduler => _scheduler;
         Canvas? _surface;
         AsmoGameEngine? _engine;
+        Compositor _compositor = new Compositor();
+        Surface? _mainSurface;
+        // If >0, limit how many Draw() logging lines are printed (helpful for noisy runs)
+        public static int DrawPrintLimit = 0;
+        private int _drawLogCount = 0;
+        // Track whether the debug grid test window was created to avoid flooding logs
+        bool _gridTestCreated = false;
         TwmManager? _twm;
         bool _prevLeftDown;
-        List<XTerm> _xterms = new();
+        List<IStarChartApp> _apps = new();
         KeyboardState _prevKeyboard;
 
         // New: single virtual terminal for fullscreen TTY mode
@@ -71,6 +80,42 @@ namespace StarChart
 
         // Expose the server so external systems can create/manipulate windows.
         public DisplayServer? Server => _server;
+
+        public void RegisterApp(IStarChartApp app)
+        {
+            if (app == null) return;
+            lock (_apps)
+            {
+                if (!_apps.Contains(app))
+                {
+                    _apps.Add(app);
+                    // If the app is also a scheduled task, add it to the scheduler
+                    if (app is IScheduledTask task)
+                    {
+                        _scheduler.AddTask(task);
+                    }
+                }
+            }
+        }
+
+        public Runtime(bool skipDefaultVt = false)
+        {
+            _skipDefaultVt = skipDefaultVt;
+        }
+
+        private void DrawLog(string msg)
+        {
+            if (DrawPrintLimit <= 0)
+            {
+                Console.Error.WriteLine(msg);
+                return;
+            }
+            if (_drawLogCount < DrawPrintLimit)
+            {
+                Console.Error.WriteLine(msg);
+                _drawLogCount++;
+            }
+        }
 
         public void Init(Canvas surface)
         {
@@ -133,7 +178,8 @@ namespace StarChart
                             if (parts.Length > 6) Enum.TryParse<XTerm.FontKind>(parts[6], true, out fk);
                             var xt = new XTerm(_server, "xterm", "XTerm", cols, rows, x, y, scale, fk);
                             xt.Render();
-                            _xterms.Add(xt);
+                            RegisterApp(xt);
+                            try { var sh = new Shell(xt); } catch { }
                             Console.Error.WriteLine($"StarChart: created xterm at {x},{y} size {cols}x{rows} scale {scale}");
                             startedAny = true;
                         }
@@ -145,23 +191,42 @@ namespace StarChart
                 }
             }
 
-            // Create a session manager and start a default session that will run /bin/sh (if present)
-            try
+            // If the runtime was instructed to skip the default VT session (e.g. the
+            // user ran `startx`/`startw`), then start the W11 windowing environment
+            // instead of creating a fullscreen virtual terminal.
+            if (_skipDefaultVt)
             {
-                var sessionManager = new StarChart.PTY.SessionManager(_server, vfs ?? new Adamantite.VFS.VfsManager());
-                var res = sessionManager.CreateSession("root");
-                if (res != null)
+                Console.Error.WriteLine("StarChart: Graphical start requested; skipping default virtual terminal.");
+                try
                 {
-                    _vt = res.Value.vt;
-                    _pty = res.Value.pty;
-                    // Attach VT to runtime for rendering/input routing
-                    AttachVirtualTerminal(_vt);
-                    Console.Error.WriteLine("StarChart: PTY session started and attached as virtual tty");
+                    StartW11();
+                    Console.Error.WriteLine("StarChart: W11 started due to graphical request.");
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine("StarChart: failed to start W11 on graphical request: " + ex.Message);
                 }
             }
-            catch (Exception ex)
+            else
             {
-                Console.Error.WriteLine("StarChart: failed to create PTY session: " + ex.Message);
+                // Create a session manager and start a default session that will run /bin/sh (if present)
+                try
+                {
+                    var sessionManager = new StarChart.PTY.SessionManager(_server, vfs ?? new Adamantite.VFS.VfsManager());
+                    var res = sessionManager.CreateSession("root");
+                    if (res != null)
+                    {
+                        _vt = res.Value.vt;
+                        _pty = res.Value.pty;
+                        // Attach VT to runtime for rendering/input routing
+                        AttachVirtualTerminal(_vt);
+                        Console.Error.WriteLine("StarChart: PTY session started and attached as virtual tty");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine("StarChart: failed to create PTY session: " + ex.Message);
+                }
             }
 
 
@@ -188,7 +253,7 @@ namespace StarChart
                         int y = 10 + (pidx / 3) * 180;
                         var xterm = new XTerm(_server, "xterm", uname, 80, 24, x, y, 1, fontKind: XTerm.FontKind.Clean8x8);
                         xterm.Render();
-                        _xterms.Add(xterm);
+                        RegisterApp(xterm);
 
                         try
                         {
@@ -214,7 +279,9 @@ namespace StarChart
             // Create a primary xterm and attach interactive shell
             var xt1 = new XTerm(_server, "xterm", "XTerm", 80, 20, 10, 10, 2, fontKind: XTerm.FontKind.Classic5x7);
             xt1.Render();
-            _xterms.Add(xt1);
+            RegisterApp(xt1);
+
+            Console.Error.WriteLine("StarChart: StartW11: primary xterm created and registered");
 
             try
             {
@@ -247,7 +314,10 @@ namespace StarChart
                         int y = 10 + (pidx / 3) * 180;
                         var xterm = new XTerm(_server, "xterm", uname, 80, 24, x, y, 1, fontKind: XTerm.FontKind.Clean8x8);
                         xterm.Render();
-                        _xterms.Add(xterm);
+
+                        RegisterApp(xterm);
+
+                        Console.Error.WriteLine($"StarChart: StartW11: spawned user xterm '{uname}' at {x},{y}");
 
                         try
                         {
@@ -293,7 +363,6 @@ namespace StarChart
             {
                 twm.Update();
             }
-            foreach (var xt in _xterms) xt.Update(deltaTime);
 
             var mouse = Mouse.GetState();
             float scale = _engine?.PresentationScale ?? 1f;
@@ -322,7 +391,7 @@ namespace StarChart
             var focused = _server?.FocusedWindow;
             if (focused != null)
             {
-                var fx = _xterms.FirstOrDefault(x => x.Window == focused);
+                var fx = _apps.OfType<XTerm>().FirstOrDefault(x => x.Window == focused);
                 if (fx != null)
                 {
                     foreach (var key in keyboard.GetPressedKeys())
@@ -332,6 +401,44 @@ namespace StarChart
                             fx.HandleKey(key, shift);
                         }
                     }
+                }
+            }
+
+            // --- Test helper: spawn a small grid window to verify compositor/display ---
+            if (!_gridTestCreated)
+            {
+                try
+                {
+                    var gwGeom = new WindowGeometry(220, 10, 200, 160);
+                    var gw = _server.CreateWindow("grid-test", gwGeom, WindowStyle.Titled, 1);
+                    if (gw != null)
+                    {
+                        // draw a simple grid pattern into the window canvas
+                        var c = gw.Canvas;
+                        if (c != null)
+                        {
+                            // clear to light gray
+                            c.Clear(0xFFCCCCCC);
+                            // draw dark lines every 16 pixels
+                            for (int y = 0; y < c.Height; y++)
+                            {
+                                for (int x = 0; x < c.Width; x++)
+                                {
+                                    if (x % 16 == 0 || y % 16 == 0)
+                                    {
+                                        c.SetPixel(x, y, 0xFF444444);
+                                    }
+                                }
+                            }
+                        }
+                        gw.Map();
+                        Console.Error.WriteLine($"Runtime.Update: created grid-test window (mapped) at {gw.Geometry.X},{gw.Geometry.Y} size {gw.Canvas.Width}x{gw.Canvas.Height}");
+                        _gridTestCreated = true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine("Runtime.Update: failed to create grid-test window: " + ex.Message);
                 }
             }
 
@@ -372,7 +479,7 @@ namespace StarChart
                     }
 
                     // If this window corresponds to an XTerm, forward mouse pixels
-                    var xt = _xterms.FirstOrDefault(x => x.Window == w);
+                    var xt = _apps.OfType<XTerm>().FirstOrDefault(x => x.Window == w);
                     if (xt != null)
                     {
                         int localX = (mx - w.Geometry.X) / wScale;
@@ -408,7 +515,7 @@ namespace StarChart
                     if (mx >= contentX + contentW || my >= contentY + contentH) continue;
 
                     // Map into client canvas pixels and forward
-                    var xt = _xterms.FirstOrDefault(x => x.Window == client);
+                    var xt = _apps.OfType<XTerm>().FirstOrDefault(x => x.Window == client);
                     if (xt != null)
                     {
                         int localX = (mx - contentX) / Math.Max(1, client.Scale);
@@ -442,21 +549,79 @@ namespace StarChart
 
         public void Draw(Canvas surface)
         {
-            // Minimal draw path: clear the provided surface and render only the
-            // attached fullscreen virtual terminal if present. This removes the
-            // previous window/compositor complexity so we can focus on PTY/session
-            // basics.
             if (surface == null) return;
-            surface.Clear(Microsoft.Xna.Framework.Color.Black);
-            if (_vt != null)
+
+            DrawLog($"Runtime.Draw: surface={surface.width}x{surface.height} serverWindows={_server?.Windows.Count ?? 0}");
+
+            // If we have a DisplayServer and windows, use the compositor to draw them.
+            if (_server != null && _server.Windows.Count > 0)
             {
-                _vt.RenderToCanvas(surface);
+                // Ensure main surface matches the canvas size
+                if (_mainSurface == null || _mainSurface.Width != surface.width || _mainSurface.Height != surface.height)
+                {
+                    _mainSurface = new Surface(surface.width, surface.height);
+                    DrawLog($"Runtime.Draw: created _mainSurface {surface.width}x{surface.height}");
+                }
+
+                // Composite all windows into the surface
+                _compositor.Compose(_server, _mainSurface);
+                DrawLog("Runtime.Draw: compositor composed into _mainSurface");
+
+                // TEMP DEBUG: mark first, middle, and last pixels so we can verify the
+                // compositor -> Canvas -> Texture upload/presentation path.
+                try
+                {
+                    if (_mainSurface.Pixels != null && _mainSurface.Pixels.Length > 0)
+                    {
+                        uint testColor = 0xFFFF00FFu; // ARGB magenta (A=FF,R=FF,G=00,B=FF)
+                        int len = _mainSurface.Pixels.Length;
+                        _mainSurface.Pixels[0] = testColor;
+                        _mainSurface.Pixels[len / 2] = testColor;
+                        _mainSurface.Pixels[len - 1] = testColor;
+
+                        uint first = _mainSurface.Pixels[0];
+                        int midIdx = len / 2;
+                        uint mid = _mainSurface.Pixels[midIdx];
+                        uint last = _mainSurface.Pixels[len - 1];
+                        DrawLog($"Runtime.Draw: pixel-sample first=0x{first:X8} mid=0x{mid:X8} last=0x{last:X8}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine("Runtime.Draw: failed sampling/_marking _mainSurface pixels: " + ex.Message);
+                }
+
+                // Transfer surface pixels to the MonoGame canvas
+                for (int i = 0; i < _mainSurface.Pixels.Length; i++)
+                {
+                    uint p = _mainSurface.Pixels[i];
+                    surface.PixelData[i] = new Microsoft.Xna.Framework.Color(
+                        (byte)((p >> 16) & 0xFF),
+                        (byte)((p >> 8) & 0xFF),
+                        (byte)(p & 0xFF),
+                        (byte)((p >> 24) & 0xFF)
+                    );
+                }
+                DrawLog("Runtime.Draw: copied _mainSurface pixels to Canvas.PixelData");
+            }
+            else
+            {
+                // Fallback: clear the provided surface
+                surface.Clear(Microsoft.Xna.Framework.Color.Black);
+                DrawLog("Runtime.Draw: no windows to composite; cleared canvas");
+
+                // If a fullscreen virtual terminal is attached, render it directly.
+                if (_vt != null)
+                {
+                    _vt.RenderToCanvas(surface);
+                    DrawLog("Runtime.Draw: rendered fullscreen VirtualTerminal to canvas");
+                }
             }
         }
 
         public void Draw(SpriteBatch sb, SpriteFont font, float presentationScale)
         {
-            if (_vt != null)
+            if (_vt != null && _surface != null)
             {
                 float scaleX = (_surface.width * presentationScale) / (float)(_vt.Columns * font.MeasureString(" ").X);
                 float scaleY = (_surface.height * presentationScale) / (float)(_vt.Rows * font.LineSpacing);
