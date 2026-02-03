@@ -1,0 +1,3 @@
+[submodule "VBlank"]
+	path = VBlank
+	url = https://github.com/fy-nite/VBlank
