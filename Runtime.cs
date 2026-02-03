@@ -50,7 +50,7 @@ namespace StarChart
         }
     }
 
-    public class Runtime : IConsoleGameWithSpriteBatch, IEngineHost
+    public class Runtime : IConsoleGame, IEngineHost
     {
         private readonly bool _skipDefaultVt;
         DisplayServer? _server;
@@ -616,19 +616,6 @@ namespace StarChart
                     _vt.RenderToCanvas(surface);
                     DrawLog("Runtime.Draw: rendered fullscreen VirtualTerminal to canvas");
                 }
-            }
-        }
-
-        public void Draw(SpriteBatch sb, SpriteFont font, float presentationScale)
-        {
-            if (_vt != null && _surface != null)
-            {
-                float scaleX = (_surface.width * presentationScale) / (float)(_vt.Columns * font.MeasureString(" ").X);
-                float scaleY = (_surface.height * presentationScale) / (float)(_vt.Rows * font.LineSpacing);
-                float scale = Math.Min(scaleX, scaleY);
-                int x = (int)((_surface.width * presentationScale - _vt.Columns * font.MeasureString(" ").X * scale) / 2);
-                int y = (int)((_surface.height * presentationScale - _vt.Rows * font.LineSpacing * scale) / 2);
-                _vt.Draw(sb, font, x, y, scale);
             }
         }
 

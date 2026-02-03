@@ -91,10 +91,10 @@ namespace Adamantite.GPU
                         {
                             int sx = srcRow + (dx + xx) * 4;
                             int di = dstRow + (dx + xx);
-                            byte r = buf[sx + 0];
-                            byte g = buf[sx + 1];
-                            byte b = buf[sx + 2];
-                            byte a = buf[sx + 3];
+                            byte a = buf[sx + 0];
+                            byte r = buf[sx + 1];
+                            byte g = buf[sx + 2];
+                            byte b = buf[sx + 3];
                             surf.Pixels[di] = ((uint)a << 24) | ((uint)r << 16) | ((uint)g << 8) | b;
                         }
                     }
@@ -119,7 +119,31 @@ namespace Adamantite.GPU
                 int scale = Math.Max(1, w.Scale);
                 int dstW = c.Width * scale;
                 int dstH = c.Height * scale;
-                target.DrawTexturedQuad(surf, w.Geometry.X, w.Geometry.Y, dstW, dstH, 0xFFFFFFFFu);
+                // Simple direct copy for scale=1 opaque windows (faster and avoids blend bugs)
+                if (scale == 1)
+                {
+                    int x0 = Math.Max(0, w.Geometry.X);
+                    int y0 = Math.Max(0, w.Geometry.Y);
+                    int x1 = Math.Min(target.Width, w.Geometry.X + dstW);
+                    int y1 = Math.Min(target.Height, w.Geometry.Y + dstH);
+                    for (int y = y0; y < y1; y++)
+                    {
+                        int srcY = y - w.Geometry.Y;
+                        if (srcY < 0 || srcY >= surf.Height) continue;
+                        int srcRow = srcY * surf.Width;
+                        int dstRow = y * target.Width;
+                        for (int x = x0; x < x1; x++)
+                        {
+                            int srcX = x - w.Geometry.X;
+                            if (srcX < 0 || srcX >= surf.Width) continue;
+                            target.Pixels[dstRow + x] = surf.Pixels[srcRow + srcX];
+                        }
+                    }
+                }
+                else
+                {
+                    target.DrawTexturedQuad(surf, w.Geometry.X, w.Geometry.Y, dstW, dstH, 0xFFFFFFFFu);
+                }
             }
 
             // Optionally purge cache entries for windows that no longer exist

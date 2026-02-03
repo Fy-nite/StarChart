@@ -83,6 +83,7 @@ namespace StarChart
             };
             // Pass whether the shell requested graphical startup so the Runtime can
             // avoid creating a fullscreen VT session and instead start W11 properly.
+            
             var runtime = new Runtime(ShellControl.StartGraphicalRequested);
             if (printFrames.HasValue)
             {
