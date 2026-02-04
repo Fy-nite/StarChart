@@ -17,11 +17,14 @@ namespace StarChart.Bin
                  return ExecuteCommand(vfs, initialCommand!);
             }
 
-            Console.WriteLine("StarChart headless shell. Type 'startx' to launch the GUI, 'help' for commands, 'exit' to quit.");
+            Console.WriteLine("StarChart headless shell. 'help' for commands, 'exit' to quit.");
 
             while (true)
             {
-                Console.Write("root@starchart:/$ ");
+                // Console.Write("root@starchart:/$ ");
+                // use the prompt and the user input
+                Console.Write("scsh> ");
+   
                 var line = Console.ReadLine();
                 if (line == null) break;
                 var cmdline = line.Trim();

@@ -1,3 +1,6 @@
 [submodule "VBlank"]
 	path = VBlank
 	url = https://github.com/fy-nite/VBlank
+[submodule "jakarada"]
+	path = jakarada
+	url = https://github.com/fy-nite/jakarada

@@ -9,6 +9,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using Adamantite.VFS;
+using System.Threading;
+using System.Threading.Tasks;
 using Canvas = Adamantite.GFX.Canvas;
 using VBlank;
 using Microsoft.Xna.Framework.Input;
@@ -51,6 +53,51 @@ namespace StarChart
 
     public class Runtime : IConsoleGame, IEngineHost
     {
+        // Basic host-provided window system for plugins to control simple windows.
+        class StarChartWindowSystem : StarChart.Plugins.IStarChartWindowSystem
+        {
+            public class HostWindow
+            {
+                public Guid Id { get; } = Guid.NewGuid();
+                public string Title { get; set; } = "";
+                public int Width { get; set; }
+                public int Height { get; set; }
+                public object? Content { get; set; }
+            }
+
+            private readonly List<HostWindow> _windows = new();
+
+            public event Action<object>? WindowClosed;
+
+            public object OpenWindow(string title, int width, int height)
+            {
+                var w = new HostWindow { Title = title, Width = width, Height = height };
+                _windows.Add(w);
+                return w as object;
+            }
+
+            public void CloseWindow(object windowHandle)
+            {
+                if (windowHandle is HostWindow w)
+                {
+                    if (_windows.Remove(w))
+                    {
+                        try { WindowClosed?.Invoke(w); } catch { }
+                    }
+                }
+            }
+
+            public void SetTitle(object windowHandle, string title)
+            {
+                if (windowHandle is HostWindow w) w.Title = title;
+            }
+
+            public void AttachContent(object windowHandle, object? content)
+            {
+                if (windowHandle is HostWindow w) w.Content = content;
+            }
+        }
+
         private readonly bool _skipDefaultVt;
         private Scheduler _scheduler = new Scheduler();
         public Scheduler Scheduler => _scheduler;
@@ -76,6 +123,36 @@ namespace StarChart
         IPty? _pty;
         
         private readonly List<IStarChartApp> _activeApps = new List<IStarChartApp>();
+        private StarChart.Plugins.IStarChartWindowSystem? _windowSystem;
+        private object? _windowSystemRoot;
+        private bool _pendingGraphicalRequest = false;
+        private readonly List<AppRunInfo> _appRunInfos = new();
+
+        private class AppRunInfo
+        {
+            public IStarChartApp App { get; set; } = null!;
+            public Task? Task { get; set; }
+            public CancellationTokenSource? Cancellation { get; set; }
+        }
+
+        // One-shot scheduled task wrapper for executing an Action on the Scheduler
+        private class OneShotTask : IScheduledTask
+        {
+            private readonly Action _action;
+            public bool IsComplete { get; private set; }
+
+            public OneShotTask(Action action)
+            {
+                _action = action ?? throw new ArgumentNullException(nameof(action));
+            }
+
+            public void Execute(double deltaTime)
+            {
+                if (IsComplete) return;
+                try { _action(); } catch { }
+                IsComplete = true;
+            }
+        }
 
         public Runtime(bool skipDefaultVt = false)
         {
@@ -247,22 +324,117 @@ namespace StarChart
             _engine.SetScale(scale);
         }
 
+        /// <summary>
+        /// Replace the current window system with an external implementation.
+        /// If `rootHandle` is provided the runtime will pass it to the external system
+        /// as the host root window (semantics are host-defined).
+        /// </summary>
+        public void SetWindowSystem(StarChart.Plugins.IStarChartWindowSystem? newSystem, object? rootHandle = null)
+        {
+            _windowSystem = newSystem;
+            _windowSystemRoot = rootHandle;
+        }
+
+        public StarChart.Plugins.IStarChartWindowSystem? CurrentWindowSystem => _windowSystem;
+
+        /// <summary>
+        /// Request that the runtime start or switch to graphical mode immediately if possible.
+        /// Plugins should call this through `PluginContext.HostServices.RequestGraphicalStart()`.
+        /// </summary>
+        public void RequestGraphicalStart()
+        {
+            try
+            {
+                StarChart.ShellControl.RequestGraphicalStart();
+                if (_graphics != null) return; // already running
+
+                if (_surface == null)
+                {
+                    // Defer until surface is available
+                    _pendingGraphicalRequest = true;
+                    return;
+                }
+
+                // Try to load/initialize graphics subsystem similar to Init()
+                IGraphicsSubsystem? subsystem = null;
+                if (File.Exists("W11.dll"))
+                {
+                    try { System.Reflection.Assembly.LoadFrom("W11.dll"); } catch { }
+                }
+
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    var type = asm.GetTypes().FirstOrDefault(t => typeof(IGraphicsSubsystem).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
+                    if (type != null)
+                    {
+                        subsystem = (IGraphicsSubsystem?)Activator.CreateInstance(type);
+                        if (subsystem != null) break;
+                    }
+                }
+
+                if (subsystem != null)
+                {
+                    try
+                    {
+                        subsystem.Initialize(this);
+                        _graphics = subsystem;
+                        DebugUtil.Debug($"StarChart: Graphics subsystem started via RequestGraphicalStart: {_graphics.GetType().Name}");
+                    }
+                    catch (Exception ex)
+                    {
+                        DebugUtil.Debug("StarChart: Failed to initialize graphics subsystem: " + ex.Message);
+                    }
+                }
+                else
+                {
+                    DebugUtil.Debug("StarChart: No IGraphicsSubsystem found when requesting graphical start.");
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugUtil.Debug("StarChart: RequestGraphicalStart failed: " + ex.Message);
+            }
+        }
+
         public void RegisterApp(IStarChartApp app)
         {
             if (app == null) return;
             
+            if (_windowSystem == null) _windowSystem = new StarChartWindowSystem();
+
             var ctx = new PluginContext 
             {
                 VFS = Adamantite.VFS.VFSGlobal.Manager,
                 Arguments = Array.Empty<string>(),
-                WindowingContext = null, 
-                Graphics = _graphics
+                WindowingContext = _windowSystem, 
+                Graphics = _graphics,
+                Scheduler = _scheduler
             };
+            
+            // Provide host services to plugins so they can request graphical start
+            ctx.HostServices = new HostServices(this);
             
             try
             {
+                // Initialize on the host/main thread
                 app.Initialize(ctx);
-                app.Start();
+
+                // Start the app on a background task so multiple apps can run concurrently.
+                var cts = new CancellationTokenSource();
+                var runInfo = new AppRunInfo { App = app, Cancellation = cts };
+                runInfo.Task = Task.Run(() =>
+                {
+                    try
+                    {
+                        app.Start();
+                    }
+                    catch (Exception ex)
+                    {
+                        DebugUtil.Debug($"App threw in Start(): {ex.Message}");
+                    }
+                }, cts.Token);
+
+                _appRunInfos.Add(runInfo);
                 _activeApps.Add(app);
             }
             catch (Exception ex)
@@ -275,6 +447,33 @@ namespace StarChart
         public void AttachVirtualTerminal(VirtualTerminal vt)
         {
             _vt = vt;
+        }
+        
+        // Host services implementation exposed to plugins
+        private class HostServices : StarChart.Plugins.IHostServices
+        {
+            private readonly Runtime _runtime;
+            public HostServices(Runtime runtime)
+            {
+                _runtime = runtime;
+            }
+
+            public void RequestGraphicalStart()
+            {
+                _runtime.RequestGraphicalStart();
+            }
+
+            public void SetWindowSystem(StarChart.Plugins.IStarChartWindowSystem? system, object? rootHandle = null)
+            {
+                _runtime.SetWindowSystem(system, rootHandle);
+            }
+
+            public StarChart.Plugins.IStarChartWindowSystem? CurrentWindowSystem => _runtime.CurrentWindowSystem;
+            public void InvokeOnMainThread(Action action)
+            {
+                if (action == null) return;
+                _runtime.Scheduler.AddTask(new OneShotTask(action));
+            }
         }
         
     }

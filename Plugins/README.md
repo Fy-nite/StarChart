@@ -209,6 +209,25 @@ public void Initialize(PluginContext context)
     // Get working directory
     Console.WriteLine($"Working in: {context.WorkingDirectory}");
 }
+
+### Host services & windowing
+
+Plugins can request the runtime to start or switch to the graphical UI using the host services exposed on `PluginContext`.
+
+```csharp
+public void Initialize(PluginContext ctx)
+{
+    // Request the runtime to start the graphical UI (if not already running)
+    ctx.HostServices?.RequestGraphicalStart();
+
+    // Access the typed window system (if available)
+    var ws = ctx.WindowingContext;
+    var win = ws?.OpenWindow("Tool", 320, 240);
+    ws?.AttachContent(win, myOpaqueContent);
+}
+```
+
+If the runtime cannot initialize the graphical subsystem immediately (for example because a rendering `Canvas` is not yet available), the request will be deferred and attempted when possible.
 ```
 
 ## Discovery vs Loading

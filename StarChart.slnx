@@ -1,0 +1,5 @@
+<Solution>
+    <Project Path="VBlank\VBlank.csproj" />
+    <Project Path="jakarada\src\jakarada.core\jakarada.core.csproj" />
+    <Project Path="StarChart.csproj" />
+</Solution>

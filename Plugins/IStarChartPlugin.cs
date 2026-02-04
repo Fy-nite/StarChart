@@ -7,9 +7,11 @@ namespace StarChart.Plugins
     /// </summary>
     public class PluginContext
     {
-        // Opaque context for the windowing system (e.g. W11 DisplayServer)
-        public object? WindowingContext { get; set; }
-        
+        // Windowing system provided by the host (implementing IStarChartWindowSystem)
+        public IStarChartWindowSystem? WindowingContext { get; set; }
+        // Host services provided by the runtime for plugins to request host-level actions
+        // (e.g. request the graphical UI, replace the window system).
+        public IHostServices? HostServices { get; set; }
         // The active graphics subsystem
         public IGraphicsSubsystem? Graphics { get; set; }
 
@@ -25,6 +27,33 @@ namespace StarChart.Plugins
         public StarChart.AppFramework.TerminalHost? TerminalHost { get; set; }
         // Scheduler provided by the host for apps/plugins to register tasks
         public StarChart.Scheduler? Scheduler { get; set; }
+    }
+
+    /// <summary>
+    /// Services exposed by the host/runtime to plugins.
+    /// </summary>
+    public interface IHostServices
+    {
+        /// <summary>
+        /// Request that the runtime start or switch to the graphical UI.
+        /// </summary>
+        void RequestGraphicalStart();
+
+        /// <summary>
+        /// Replace the current window system with the provided implementation.
+        /// </summary>
+        void SetWindowSystem(IStarChartWindowSystem? system, object? rootHandle = null);
+
+        /// <summary>
+        /// Get the current window system in use (may be null).
+        /// </summary>
+        IStarChartWindowSystem? CurrentWindowSystem { get; }
+
+        /// <summary>
+        /// Schedule an action to run on the host/main thread (render/update loop).
+        /// Useful for background apps that need to perform UI or windowing operations.
+        /// </summary>
+        void InvokeOnMainThread(Action action);
     }
 
     /// <summary>
@@ -121,5 +150,38 @@ namespace StarChart.Plugins
         /// Handle mouse input.
         /// </summary>
         void HandleMouse(int x, int y, bool leftDown, bool leftPressed, bool leftReleased);
+    }
+
+    /// <summary>
+    /// Interface for programs that want to control individual windows provided by the host.
+    /// Plugins can cast `PluginContext.WindowingContext` to this type to open/close windows
+    /// and attach content or receive basic events.
+    /// </summary>
+    public interface IStarChartWindowSystem
+    {
+        /// <summary>
+        /// Open a new window with the specified title. Returns an opaque window handle.
+        /// </summary>
+        object OpenWindow(string title, int width, int height);
+
+        /// <summary>
+        /// Close the given window handle.
+        /// </summary>
+        void CloseWindow(object windowHandle);
+
+        /// <summary>
+        /// Set the window's title.
+        /// </summary>
+        void SetTitle(object windowHandle, string title);
+
+        /// <summary>
+        /// Attach an opaque content object to the window (host-defined semantics).
+        /// </summary>
+        void AttachContent(object windowHandle, object? content);
+
+        /// <summary>
+        /// Event raised when a window is closed by the host or user.
+        /// </summary>
+        event Action<object>? WindowClosed;
     }
 }

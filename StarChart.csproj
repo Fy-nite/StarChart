@@ -5,11 +5,25 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="VBlank\**\*.cs" />
+    <Compile Remove="jakarada\**\*.cs" />
+  </ItemGroup>
 
 
   <ItemGroup>
-    <ProjectReference Include="VBlank.csproj" />
+    <ProjectReference Include="VBlank\VBlank.csproj" />
+    <ProjectReference Include="jakarada\src\jakarada.core\jakarada.core.csproj" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.4.1" />
   </ItemGroup>
 
 </Project>
